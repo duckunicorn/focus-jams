@@ -27,6 +27,14 @@
   body.viz .ringbox{transition:transform .08s linear}
   .vizbadge{display:none;z-index:5;position:fixed;left:50%;bottom:2.4vh;transform:translateX(-50%);font:700 clamp(14px,1.3vw,24px) "Space Grotesk",system-ui,sans-serif;letter-spacing:.3em;text-transform:uppercase;color:#fff;text-shadow:0 0 18px var(--accent),0 0 4px #000;pointer-events:none}
   body.viz.vizprev .vizbadge{display:block}
+  .endmsg{position:fixed;inset:0;z-index:9;display:flex;align-items:center;justify-content:center;text-align:center;padding:4vw;
+    background:radial-gradient(circle at 50% 50%, color-mix(in srgb,var(--accent) 30%,rgba(0,0,0,.82)), rgba(0,0,0,.9) 70%);
+    opacity:0;visibility:hidden;transition:opacity .45s ease,visibility 0s linear .45s;cursor:pointer}
+  .endmsg.on{opacity:1;visibility:visible;transition:opacity .35s ease}
+  .endmsg-t{font:700 clamp(44px,8.5vw,180px)/1.02 "Space Grotesk",system-ui,sans-serif;letter-spacing:-.03em;color:#fff;
+    text-shadow:0 0 40px var(--accent),0 0 12px var(--accent);transform:scale(.85);transition:transform .5s cubic-bezier(.2,1.4,.4,1)}
+  .endmsg.on .endmsg-t{transform:scale(1)}
+  .endmsg-s{margin-top:2.2vh;font:500 clamp(16px,1.8vw,34px) "Space Grotesk",system-ui,sans-serif;color:rgba(255,255,255,.75);letter-spacing:.08em;text-transform:uppercase}
   .viztoast{position:fixed;left:50%;top:14vh;transform:translateX(-50%);z-index:7;background:rgba(0,0,0,.72);color:#fff;font:700 clamp(15px,1.4vw,26px) "Space Grotesk",system-ui,sans-serif;padding:.6em 1.1em;border-radius:14px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
   .viztoast.on{opacity:1}
   .vizconnect{display:none;position:fixed;left:0;right:0;bottom:16vh;margin:0 auto;width:max-content;max-width:90vw;z-index:6;box-shadow:0 10px 40px -8px var(--accent),0 0 0 4px rgba(0,0,0,.35) !important;font-size:clamp(15px,1.3vw,24px) !important;padding:.9em 1.4em !important}
@@ -245,7 +253,7 @@
 </style>
 </head>
 <body>
-<div id="bg"></div><div id="dim"></div><canvas id="viz"></canvas><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button>
+<div id="bg"></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button>
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
@@ -474,6 +482,15 @@
           <button class="ghost sm" id="testFocus">▶ Test focus sound</button>
           <button class="ghost sm" id="testBreak">▶ Test break sound</button>
         </div>
+      <h3>When a break ends</h3>
+      <div class="toggles" style="margin-top:0">
+        <label><input type="checkbox" id="s-endMsgOn"> Show a big message in the middle of the screen (and on synced phones)</label>
+      </div>
+      <div class="sounds">
+        <label>Message<input type="text" id="s-endMsg" maxlength="80" placeholder="Now time to focus!"></label>
+        <label>Show it for<select id="s-endMsgSecs"><option value="3">3 seconds</option><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="0">Until clicked</option></select></label>
+      </div>
+      <div class="testrow"><button class="ghost sm" id="endMsgTest">▶ Preview message</button></div>
     </div>
 
     <div id="dlgMusic" class="dpane" hidden>
@@ -510,6 +527,7 @@
         <label style="grid-column:1 / -1">Microphone or input<select id="s-vizDev"><option value="">Default microphone</option></select></label>
       </div>
       <div class="toggles">
+        <label><input type="checkbox" id="s-vizStopAtEnd"> Stop the visualizer when the break ends (off: it keeps going until you press V)</label>
         <label><input type="checkbox" id="s-vizStrobe"> Strobe flashes (don't use if anyone is sensitive to flashing lights)</label>
       </div>
       <div class="testrow">
@@ -641,6 +659,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              focusSound:"chime", breakSound:"bell", volume:70, repeat:1, jamLink:"",
              clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
              viz:true, vizLevel:"party", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
+             vizStopAtEnd:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -854,7 +873,25 @@ function finish(){
   notify(was === "focus" ? "Focus done — take a break 🎧" : "Break's over — back to it 🍅");
   setMode(n);
   if(S.auto) start();
+  if(was !== "focus") breakEnded();
 }
+var endMsgT = null, endMsgSeq = 0;
+// called whenever a break finishes or is skipped
+function breakEnded(){
+  if(S.vizStopAtEnd) vizPreview = false;
+  else if(S.viz) vizPreview = true;      // keep the party going until V is pressed
+  vizUpdate(); renderVizUI();
+  if(S.endMsgOn){ endMsgSeq++; showEndMsg(S.endMsg, S.endMsgSecs, running ? "" : "Press Start when you're ready"); }
+  syncSoon();
+}
+function showEndMsg(text, secs, sub){
+  $("endMsgT").textContent = (text || "").trim() || DEF.endMsg;
+  $("endMsgS").textContent = sub || "";
+  $("endMsgBox").classList.add("on");
+  clearTimeout(endMsgT);
+  if(+secs > 0) endMsgT = setTimeout(hideEndMsg, secs*1000);
+}
+function hideEndMsg(){ clearTimeout(endMsgT); $("endMsgBox").classList.remove("on"); }
 
 /* ================= sound + notifications ================= */
 let actx = null, pendingSnd = null;
@@ -1177,7 +1214,7 @@ async function handleRedirect(){
 /* ================= wiring ================= */
 $("go").onclick = () => running ? pause() : start();
 $("reset").onclick = () => { cancelSound(); stopTick(); running = false; remaining = total(mode); render(); syncMusic(); };
-$("skip").onclick = () => { const wasRunning = running; setMode(next(false)); if(wasRunning && S.auto) start(); };
+$("skip").onclick = () => { const wasRunning = running, was = mode; setMode(next(false)); if(wasRunning && S.auto) start(); if(was !== "focus") breakEnded(); };
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => setMode(t.dataset.m));
 $("chips").onclick = e => { const b = e.target.closest(".chip"); if(b) setPlaylist(chipKind(), b.dataset.uri); };
 $("load").onclick = () => {
@@ -1425,6 +1462,7 @@ $("imgfile").onchange = e => {
 };
 
 document.addEventListener("keydown", e => {
+  if($("endMsgBox").classList.contains("on") && (e.key === "Escape" || e.key === "Enter" || e.key === " ")){ e.preventDefault(); hideEndMsg(); return; }
   if((e.key === "q" || e.key === "Q") && !e.target.matches("input,select")){
     if($("syncBig").open) $("syncBig").close(); else if(!document.querySelector("dialog[open]")) openSyncBig();
     return;
@@ -1466,7 +1504,8 @@ function syncState(){
     remaining: running ? Math.max(0, endAt - Date.now()) : remaining*1000, total: total(mode)*1000,
     cycle, every:S.every, done:stats.done, colors:c,
     song: curTrack && curTrack.name ? {uri:curTrack.uri, name:curTrack.name, artist:curTrack.artist || "", art:curTrack.art || ""} : null,
-    playing, jam:S.jamLink, t:Date.now(), endEpoch: running ? endAt : 0};
+    playing, jam:S.jamLink, t:Date.now(), endEpoch: running ? endAt : 0,
+    endMsg: S.endMsgOn ? {seq:endMsgSeq, text:S.endMsg, secs:S.endMsgSecs} : null};
 }
 function broadcast(){
   if(!syncReady || !conns.size) return;
@@ -1560,13 +1599,16 @@ setInterval(broadcast, 10000);   // heartbeat keeps phones' clocks lined up
 /* ----- phone side ----- */
 var phState = null, phEnd = 0, phConn = null, phPeer = null, phRetry = null, phLastMode = null;
 function phSetStatus(t, live){ $("phStatus").textContent = t; $("phLive").classList.toggle("on", !!live); }
-var phLastT = 0, phGotData = 0, relayOpen = false, phSince = Date.now();
+var phLastT = 0, phGotData = 0, relayOpen = false, phSince = Date.now(), phMsgSeq = null;
 function phApply(st, via){
   if(!st || st.v !== 1) return;
   if(st.t && st.t <= phLastT) return;     // already have something newer from the other path
   phLastT = st.t || 0; phGotData = Date.now();
   $("phHelp").hidden = true;
   if(phLastMode && st.mode !== phLastMode && navigator.vibrate) navigator.vibrate([250, 120, 250]);
+  // show the projector's "break is over" message, once per break (and not for an old one when first connecting)
+  if(st.endMsg && phLastMode !== null && st.endMsg.seq !== phMsgSeq && st.endMsg.seq > 0) showEndMsg(st.endMsg.text, Math.min(+st.endMsg.secs || 10, 10));
+  if(st.endMsg) phMsgSeq = st.endMsg.seq;
   phLastMode = st.mode; phState = st;
   // direct updates arrive instantly, so count down from "now"; relay updates may be older, so use the absolute end time
   phEnd = via === "relay" && st.running && st.endEpoch ? st.endEpoch : Date.now() + st.remaining;
@@ -1951,6 +1993,7 @@ const VIZ_HOW = {
 };
 function renderVizUI(){
   $("s-vizSens").value = S.vizSens; $("s-vizDecay").value = S.vizDecay; vizSliderLabels();
+  $("s-vizStopAtEnd").checked = S.vizStopAtEnd;
   $("s-viz").checked = S.viz; $("s-vizLevel").value = S.vizLevel; $("s-vizSrc").value = S.vizSrc; $("s-vizStrobe").checked = S.vizStrobe;
   $("vizMic").hidden = S.vizSrc !== "mic";
   $("vizSys").hidden = S.vizSrc !== "system";
@@ -1962,6 +2005,15 @@ function renderVizUI(){
 }
 $("s-viz").onchange = e => { S.viz = e.target.checked; save(); vizUpdate(); };
 $("s-vizLevel").onchange = e => { S.vizLevel = e.target.value; save(); };
+$("s-vizStopAtEnd").onchange = e => { S.vizStopAtEnd = e.target.checked; save(); };
+$("endMsgBox").onclick = hideEndMsg;
+function renderEndMsgUI(){ $("s-endMsgOn").checked = S.endMsgOn; $("s-endMsg").value = S.endMsg; $("s-endMsgSecs").value = String(S.endMsgSecs); }
+$("s-endMsgOn").onchange = e => { S.endMsgOn = e.target.checked; save(); syncSoon(); };
+$("s-endMsg").oninput = e => { S.endMsg = e.target.value; save(); };
+$("s-endMsg").onchange = () => { if(!S.endMsg.trim()){ S.endMsg = DEF.endMsg; renderEndMsgUI(); save(); } syncSoon(); };
+$("s-endMsgSecs").onchange = e => { S.endMsgSecs = +e.target.value; save(); };
+$("endMsgTest").onclick = () => { $("look").close(); showEndMsg(S.endMsg, S.endMsgSecs || 5); };
+renderEndMsgUI();
 function vizSliderLabels(){ $("vizSensVal").textContent = S.vizSens; $("vizDecayVal").textContent = S.vizDecay; }
 ["vizSens","vizDecay"].forEach(k => {
   $("s-"+k).oninput = e => { S[k] = +e.target.value; vizSliderLabels(); };
