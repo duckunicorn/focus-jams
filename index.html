@@ -100,6 +100,8 @@
   body.stage h2{font-size:clamp(18px,1.5vw,30px)}
   body.stage #srcseg,body.stage .card .hint,body.stage #embedPane .row{display:none}
   body.stage .nowpl{font-size:clamp(12px,1vw,20px)}
+  body.stage #embed{min-height:152px}
+  body.stage #embed iframe{height:152px !important}
   body.stage .chip{font-size:clamp(13px,.95vw,19px)}
   body.stage #npArt{width:clamp(96px,11vw,220px);height:clamp(96px,11vw,220px)}
   body.stage .np-kicker{font-size:clamp(12px,1vw,20px)}
@@ -184,6 +186,30 @@
   select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);font:14px "Space Grotesk",system-ui,sans-serif;padding:9px 10px;border-radius:12px;width:100%}
   select option{background:var(--panel-solid);color:var(--ink)}
   .testrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+
+  /* phone sync */
+  .sync-row{display:flex;gap:14px;align-items:center}
+  .sync-sub{font-size:13px;color:var(--muted);margin-top:3px}
+  body.stage .sync-row .qrmini{width:clamp(130px,13vw,260px);height:clamp(130px,13vw,260px)}
+  body.stage .sync-row b{font-size:clamp(17px,1.7vw,34px)}
+  body.stage .sync-sub{font-size:clamp(13px,1.1vw,22px)}
+  .live{display:inline-block;width:8px;height:8px;border-radius:50%;background:#7a7a7a;margin-right:6px;vertical-align:middle}
+  .live.on{background:#39d98a;box-shadow:0 0 10px #39d98a}
+
+  /* phone view (?sync=CODE) */
+  body.phone .wrap{display:none}
+  #phone{max-width:460px;margin:0 auto;padding:18px 16px 40px;min-height:100vh;display:flex;flex-direction:column;gap:16px}
+  .ph-top{display:flex;justify-content:space-between;align-items:center;font-weight:700}
+  .ph-top .brand{font-size:18px}
+  .ph-status{font-size:12px;font-weight:500;color:var(--muted)}
+  #phone .ringbox{width:min(76vw,320px);margin:6px auto 0}
+  #phone .time{font-size:clamp(52px,17vw,76px)}
+  .ph-song{display:flex;gap:12px;align-items:center}
+  .ph-song img{width:64px;height:64px;border-radius:10px;object-fit:cover;background:var(--panel2);flex:none}
+  .ph-song .np-title{font-size:17px}
+  .ph-btns{display:flex;flex-direction:column;gap:10px}
+  .ph-btns .big,.ph-btns .ghost{width:100%;text-align:center;text-decoration:none}
+  body.phone #lyrQrWrap{display:none !important}
 
   /* jam QR */
   .jam{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
@@ -308,7 +334,17 @@
         <div class="musicstate"><span id="appMsg"></span></div>
       </div>
 
-      <div class="jam">
+      <div class="jam" id="syncBox" hidden>
+        <div class="sync-row">
+          <div class="qrmini" id="syncQr" title="Scan with your phone"></div>
+          <div>
+            <b>Scan to follow along</b>
+            <div class="sync-sub" id="syncSub">Timer &amp; song on your phone</div>
+            <div class="sync-sub"><span class="live" id="syncLive"></span><span id="syncCount">Starting…</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="jam" id="jamBox">
         <div id="jamEmpty"><button class="ghost sm" id="jamAdd">📱 Add a QR code so friends can join your Jam</button></div>
         <div id="jamSet" class="jam-row" hidden>
           <div class="qrmini" id="qrMini" title="Show bigger"></div>
@@ -323,6 +359,32 @@
       <p class="hint"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>S</kbd> skip</p>
     </section>
   </div>
+</div>
+
+<!-- PHONE VIEW -->
+<div id="phone" hidden>
+  <div class="ph-top"><div class="brand"><span class="dot"></span>Focus Jams</div><div class="ph-status"><span class="live" id="phLive"></span><span id="phStatus">Connecting…</span></div></div>
+  <div class="card">
+    <div class="ringbox">
+      <svg viewBox="0 0 260 260">
+        <circle class="track" cx="130" cy="130" r="118" fill="none" stroke-width="10"/>
+        <circle class="prog" id="phProg" cx="130" cy="130" r="118" fill="none" stroke-width="10"/>
+      </svg>
+      <div class="center"><div class="time" id="phTime">--:--</div><div class="label" id="phLabel">Waiting</div></div>
+    </div>
+    <div class="dots" id="phDots" style="margin-top:14px;margin-bottom:0"></div>
+  </div>
+  <div class="card" id="phSongCard" hidden>
+    <div class="ph-song">
+      <img id="phArt" alt="">
+      <div style="min-width:0"><div class="np-kicker" id="phKicker">Now playing</div><div class="np-title" id="phTitle"></div><div class="np-artist" id="phArtist"></div></div>
+    </div>
+  </div>
+  <div class="ph-btns">
+    <a class="big btnlink" id="phJam" href="#" target="_blank" rel="noopener" hidden style="color:var(--accent-ink)">🎧 Join the Jam on Spotify</a>
+    <button class="ghost" id="phLyr" hidden>🎤 Lyrics &amp; karaoke</button>
+  </div>
+  <p class="hint center-t">This page follows the big screen live. Keep it open.</p>
 </div>
 
 <!-- CUSTOMIZE -->
@@ -346,6 +408,7 @@
         <div class="toggles">
           <label><input type="checkbox" id="s-auto"> Auto-start the next session</label>
           <label><input type="checkbox" id="s-notify"> Desktop notifications</label>
+          <label><input type="checkbox" id="s-phoneSync"> Phone sync: show a QR code so phones can follow the timer, see the song and join the Jam</label>
           <label><input type="checkbox" id="s-clock24"> 24-hour clock</label>
           <label><input type="checkbox" id="s-clockSec"> Show seconds on the clock</label>
         </div>
@@ -355,6 +418,10 @@
           <label>Volume<input type="range" id="s-volume" min="0" max="100"></label>
           <label>Play it<select id="s-repeat"><option value="1">Once</option><option value="2">Twice</option><option value="3">3 times</option></select></label>
         </div>
+        <div class="testrow" style="margin-bottom:6px">
+          <button class="ghost sm" id="syncNew">New phone sync code</button>
+        </div>
+        <p class="hint" style="margin-top:0" id="syncHint">A new code disconnects everyone's phone and changes the QR code.</p>
         <div class="testrow">
           <button class="ghost sm" id="testFocus">▶ Test focus sound</button>
           <button class="ghost sm" id="testBreak">▶ Test break sound</button>
@@ -497,7 +564,7 @@ const LABELS = {focus:"Focus", short:"Short break", long:"Long break"};
 const MODE_IDX = {focus:0, short:1, long:2};
 const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              focusSound:"chime", breakSound:"bell", volume:70, repeat:1, jamLink:"",
-             clock24:false, clockSec:false, stage:true,
+             clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -508,6 +575,7 @@ const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
   set(k,v){ try{ v===null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
 };
+const SYNC = (new URLSearchParams(location.search).get("sync") || "").replace(/[^a-z0-9]/gi, "").slice(0, 16);   // phone view
 const SAVED = store.get("fj-settings") || {};
 let S = Object.assign({}, DEF, SAVED);
 if(SAVED.chime === false && !SAVED.focusSound){ S.focusSound = S.breakSound = "none"; }  // older version's "no chime"
@@ -629,6 +697,7 @@ function applyLook(){
   bg.style.filter = S.blur ? `blur(${S.blur}px)` : "";
   bg.style.transform = S.blur ? "scale(1.08)" : "";
   $("dim").style.opacity = S.dim / 100;
+  syncSoon();
 }
 function renderLookUI(){
   $("themes").innerHTML = Object.entries(THEMES).map(([k,t]) =>
@@ -663,6 +732,7 @@ function render(){
   $("count").textContent = `${stats.done} focus session${stats.done===1?"":"s"} today`;
   renderChips();
   applyLook();
+  syncSoon();
   renderTime();
 }
 function setMode(m){
@@ -822,27 +892,28 @@ window.onSpotifyIframeApiReady = (IFrameAPI) => {
       if(!e.data.isPaused) everPlayed = true;
       setMusicState(e.data.isPaused ? (running && !wantMusic() ? "Paused for your break" : "Paused") : "Playing", !e.data.isPaused);
       if(e.data.playingURI) embedTrack(e.data.playingURI);
+      syncSoon();
       if(S.src === "embed") renderMini(!e.data.isPaused && curTrack && curTrack.name ? `♪ ${curTrack.name}${curTrack.artist ? " — " + curTrack.artist : ""}` : null);
     });
   });
 };
 // The embed only reports the track's ID, so look up its title from Spotify's public oEmbed endpoint.
-const titleCache = {};
+const titleCache = {}, artCache = {};
 function embedTrack(uri){
   if(S.src !== "embed" || (curTrack && curTrack.uri === uri)) return;
-  curTrack = {uri, name:titleCache[uri] || "", artist:""};
+  curTrack = {uri, name:titleCache[uri] || "", artist:"", art:artCache[uri] || ""};
   updateLyrBtns();
   const m = uri.match(/^spotify:(track|episode):([A-Za-z0-9]+)$/);
   if(!m || titleCache[uri]) return;
   fetch(`https://open.spotify.com/oembed?url=https://open.spotify.com/${m[1]}/${m[2]}`)
     .then(r => r.ok ? r.json() : null)
-    .then(j => { if(j && j.title){ titleCache[uri] = j.title; if(curTrack && curTrack.uri === uri){ curTrack.name = j.title; updateLyrBtns(); } } })
+    .then(j => { if(j && j.title){ titleCache[uri] = j.title; artCache[uri] = j.thumbnail_url || ""; if(curTrack && curTrack.uri === uri){ curTrack.name = j.title; curTrack.art = artCache[uri]; updateLyrBtns(); } } })
     .catch(() => {});
 }
 const sp = document.createElement("script");
 sp.src = "https://open.spotify.com/embed/iframe-api/v1"; sp.async = true;
 sp.onerror = () => setMusicState("Couldn't reach Spotify — check your connection", false);
-document.body.appendChild(sp);
+if(!SYNC) document.body.appendChild(sp);
 
 /* ---------- your Spotify account (Jams) ---------- */
 const SCOPES = "user-read-currently-playing user-read-playback-state user-modify-playback-state";
@@ -954,7 +1025,7 @@ function renderNP(d){
   $("npArtist").textContent = artist;
   $("npPlay").textContent = d.is_playing ? "❚❚" : "▶";
   np = {playing:d.is_playing, prog:d.progress_ms || 0, at:Date.now(), dur:it.duration_ms || 0, has:true};
-  curTrack = {uri:it.uri, name:it.name, artist}; updateLyrBtns();
+  curTrack = {uri:it.uri, name:it.name, artist, art:art ? art.url : ""}; updateLyrBtns();
   renderMini(d.is_playing ? `♪ ${it.name} — ${artist}` : null);
   updateProgress();
 }
@@ -1082,7 +1153,7 @@ function saveJam(){
   const v = $("jamLink").value.trim();
   if(!v){ $("jamMsg").textContent = "Paste the invite link from Spotify first."; return; }
   if(!/^https?:\/\/\S+$/i.test(v)){ $("jamMsg").textContent = "That doesn't look like a link — it should start with https://"; return; }
-  S.jamLink = v; save(); renderJam();
+  S.jamLink = v; save(); renderJam(); renderSyncBox(); syncSoon();
   $("jamMsg").textContent = /spotify/i.test(v) ? "" : "Made a QR code, but that doesn't look like a Spotify link — double-check it.";
 }
 ["jamOpen","jamAdd","jamBig","jamEdit"].forEach(id => $(id).onclick = openJam);
@@ -1091,7 +1162,7 @@ $("jamClose").onclick = () => $("jam").close();
 $("jam").onclick = e => { if(e.target === $("jam")) $("jam").close(); };
 $("jamSave").onclick = saveJam;
 $("jamLink").onkeydown = e => { if(e.key === "Enter") saveJam(); };
-$("jamClear").onclick = () => { S.jamLink = ""; save(); renderJam(); $("jamLink").focus(); };
+$("jamClear").onclick = () => { S.jamLink = ""; save(); renderJam(); renderSyncBox(); syncSoon(); $("jamLink").focus(); };
 $("jamCopy").onclick = () => {
   navigator.clipboard && navigator.clipboard.writeText(S.jamLink)
     .then(() => { $("jamCopy").textContent = "Copied"; setTimeout(() => $("jamCopy").textContent = "Copy link", 1500); });
@@ -1133,6 +1204,7 @@ renderPlUI();
 
 /* lyrics */
 function updateLyrBtns(){
+  syncSoon();
   const ok = !!(curTrack && curTrack.uri && /^spotify:track:/.test(curTrack.uri));
   ["lyrEmbed","lyrApp"].forEach(id => { $(id).disabled = !ok; $(id).title = ok ? "Lyrics & karaoke" : "Play a song first"; });
   if($("lyr").open) fillLyrics();
@@ -1171,7 +1243,7 @@ function wake(){
   idleT = setTimeout(() => { if(!document.querySelector("dialog[open]")) document.body.classList.add("idle"); }, 3000);
 }
 function applyStage(){
-  document.body.classList.toggle("stage", S.stage);
+  document.body.classList.toggle("stage", S.stage && !SYNC);
   $("stageBtn").textContent = S.stage ? "↙ Normal view" : "📽 Projector";
   wake();
 }
@@ -1283,8 +1355,153 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("visibilitychange", () => { if(!document.hidden && S.src === "app" && auth && Date.now() - lastPoll > 4000) poll(); });
 
+/* ================= phone sync ================= */
+// The projector is a PeerJS "host"; each phone connects to it directly (WebRTC) using the code in the QR.
+const PEER_PREFIX = "focusjams-";
+var peer = null, conns = new Set(), syncT = null, syncReady = false, peerRetry = null;   // var: used before this section runs
+const peerOpts = () => Object.assign({debug:0}, window.FJ_PEER_OPTS || {});
+function loadPeerJs(){
+  return new Promise((res, rej) => {
+    if(window.Peer) return res();
+    const sc = document.createElement("script");
+    sc.src = "peerjs.min.js"; sc.onload = res; sc.onerror = rej;
+    document.head.appendChild(sc);
+  });
+}
+function newCode(){ const a = new Uint8Array(8); crypto.getRandomValues(a); return Array.from(a, b => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join(""); }
+function syncUrl(){ return location.origin + location.pathname.replace(/index\.html$/, "") + "?sync=" + S.syncCode; }
+const LOCAL_ONLY = (IS_FILE || /^(127\.|localhost$|\[?::1)/.test(location.hostname)) && !window.FJ_PEER_OPTS;
+function syncState(){
+  const c = colors();
+  const playing = S.src === "app" ? np.playing : !musicPaused;
+  return {v:1, mode, label:LABELS[mode], running,
+    remaining: running ? Math.max(0, endAt - Date.now()) : remaining*1000, total: total(mode)*1000,
+    cycle, every:S.every, done:stats.done, colors:c,
+    song: curTrack && curTrack.name ? {uri:curTrack.uri, name:curTrack.name, artist:curTrack.artist || "", art:curTrack.art || ""} : null,
+    playing, jam:S.jamLink};
+}
+function broadcast(){
+  if(!syncReady || !conns.size) return;
+  const st = syncState();
+  conns.forEach(c => { try{ if(c.open) c.send(st); }catch(e){} });
+}
+function syncSoon(){ if(!SYNC && typeof broadcast === "function"){ clearTimeout(syncT); syncT = setTimeout(broadcast, 150); } }
+function renderSyncBox(){
+  const on = S.phoneSync && !LOCAL_ONLY;
+  $("syncBox").hidden = !on;
+  $("jamBox").hidden = on;           // the phone page has the Jam button, so one QR is enough
+  if(on){
+    $("syncQr").innerHTML = qrSvg(syncUrl());
+    $("syncSub").textContent = S.jamLink ? "Timer, song & Join the Jam on your phone" : "Timer & song on your phone";
+    const n = Array.from(conns).filter(c => c.open).length;
+    $("syncLive").classList.toggle("on", syncReady);
+    $("syncCount").textContent = !syncReady ? "Connecting…" : n ? `${n} phone${n === 1 ? "" : "s"} connected` : "Ready";
+  }
+  $("syncHint").textContent = LOCAL_ONLY
+    ? "Phone sync works on your GitHub Pages link — phones can't reach this computer's local address."
+    : "A new code disconnects everyone's phone and changes the QR code.";
+}
+function stopHost(){
+  clearTimeout(peerRetry); syncReady = false;
+  conns.forEach(c => { try{ c.close(); }catch(e){} }); conns.clear();
+  if(peer){ try{ peer.destroy(); }catch(e){} peer = null; }
+}
+async function startHost(){
+  stopHost(); renderSyncBox();
+  if(!S.phoneSync || LOCAL_ONLY) return;
+  if(!S.syncCode){ S.syncCode = newCode(); save(); renderSyncBox(); }
+  try{ await loadPeerJs(); }catch(e){ $("syncCount").textContent = "Couldn't load phone sync"; return; }
+  const p = peer = new Peer(PEER_PREFIX + S.syncCode, peerOpts());
+  p.on("open", () => { if(p !== peer) return; syncReady = true; renderSyncBox(); });
+  p.on("connection", c => {
+    c.on("open", () => { conns.add(c); renderSyncBox(); c.send(syncState()); });
+    c.on("close", () => { conns.delete(c); renderSyncBox(); });
+    c.on("error", () => { conns.delete(c); renderSyncBox(); });
+  });
+  p.on("disconnected", () => { if(p === peer && !p.destroyed){ syncReady = false; renderSyncBox(); setTimeout(() => { try{ p.reconnect(); }catch(e){} }, 2000); } });
+  p.on("error", e => {
+    if(p !== peer) return;
+    syncReady = false; renderSyncBox();
+    // "unavailable-id" usually means this page is open in another tab; try again shortly
+    if(["unavailable-id","network","server-error","socket-error","socket-closed"].includes(e.type)){
+      $("syncCount").textContent = e.type === "unavailable-id" ? "Open in another tab? Retrying…" : "Reconnecting…";
+      clearTimeout(peerRetry); peerRetry = setTimeout(startHost, 8000);
+    }
+  });
+}
+setInterval(broadcast, 10000);   // heartbeat keeps phones' clocks lined up
+
+/* ----- phone side ----- */
+var phState = null, phEnd = 0, phConn = null, phPeer = null, phRetry = null, phLastMode = null;
+function phSetStatus(t, live){ $("phStatus").textContent = t; $("phLive").classList.toggle("on", !!live); }
+function phApply(st){
+  if(!st || st.v !== 1) return;
+  if(phLastMode && st.mode !== phLastMode && navigator.vibrate) navigator.vibrate([250, 120, 250]);
+  phLastMode = st.mode; phState = st;
+  phEnd = Date.now() + st.remaining;
+  const r = document.documentElement.style, c = st.colors;
+  r.setProperty("--bg", c.bg); r.setProperty("--ink", c.ink); r.setProperty("--accent", c.accent); r.setProperty("--accent-ink", c.accentInk);
+  r.colorScheme = lum(c.bg) > .3 ? "light" : "dark";
+  $("bg").style.background = BGS.glow.css(c);
+  $("phLabel").textContent = st.label + (st.running ? "" : " · paused");
+  $("phDots").innerHTML = Array.from({length:st.every}, (_,i) => `<i class="${i < st.cycle ? "f" : ""}"></i>`).join("");
+  const sg = st.song;
+  $("phSongCard").hidden = !sg;
+  if(sg){
+    if(sg.art){ if($("phArt").getAttribute("src") !== sg.art) $("phArt").src = sg.art; $("phArt").hidden = false; } else $("phArt").hidden = true;
+    $("phKicker").textContent = st.playing ? "Now playing" : "Paused";
+    $("phTitle").textContent = sg.name; $("phArtist").textContent = sg.artist;
+  }
+  $("phJam").hidden = !st.jam; if(st.jam) $("phJam").href = st.jam;
+  $("phLyr").hidden = !(sg && /^spotify:track:/.test(sg.uri));
+  phTick();
+}
+function phTick(){
+  if(!phState) return;
+  const rem = phState.running ? Math.max(0, phEnd - Date.now()) : phState.remaining;
+  $("phTime").textContent = fmt(rem/1000);
+  $("phProg").style.strokeDashoffset = C * (1 - rem/phState.total);
+  document.title = fmt(rem/1000) + " · " + phState.label;
+}
+async function startPhone(){
+  document.body.classList.add("phone");
+  $("phone").hidden = false;
+  $("phProg").style.strokeDasharray = C;
+  setInterval(phTick, 250);
+  $("phLyr").onclick = () => { curTrack = phState.song; fillLyrics(); $("lyr").showModal(); };
+  try{ await loadPeerJs(); }catch(e){ phSetStatus("Couldn't load — refresh", false); return; }
+  const connect = () => {
+    clearTimeout(phRetry);
+    if(!phPeer || phPeer.destroyed){
+      phPeer = new Peer(peerOpts());
+      phPeer.on("open", connect);
+      phPeer.on("error", e => {
+        phSetStatus(e.type === "peer-unavailable" ? "Big screen is offline — retrying…" : "Reconnecting…", false);
+        phRetry = setTimeout(connect, 4000);
+      });
+      phPeer.on("disconnected", () => { try{ phPeer.reconnect(); }catch(e){} });
+      return;
+    }
+    if(!phPeer.open) return;
+    if(phConn) try{ phConn.close(); }catch(e){}
+    const c = phConn = phPeer.connect(PEER_PREFIX + SYNC, {reliable:true});
+    c.on("open", () => phSetStatus("Live", true));
+    c.on("data", phApply);
+    c.on("close", () => { if(c !== phConn) return; phSetStatus("Reconnecting…", false); phRetry = setTimeout(connect, 3000); });
+    c.on("error", () => { if(c !== phConn) return; phSetStatus("Reconnecting…", false); phRetry = setTimeout(connect, 3000); });
+  };
+  connect();
+  // phones drop connections when the screen locks; reconnect when it wakes
+  document.addEventListener("visibilitychange", () => { if(!document.hidden && !(phConn && phConn.open)) connect(); });
+}
+$("s-phoneSync").checked = S.phoneSync;
+$("s-phoneSync").onchange = e => { S.phoneSync = e.target.checked; save(); startHost(); };
+$("syncNew").onclick = () => { S.syncCode = newCode(); save(); startHost(); };
+
 /* ================= start up ================= */
 (async function init(){
+  if(SYNC) return startPhone();
+  startHost();
   renderChips();
   render();
   await handleRedirect();
