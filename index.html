@@ -61,8 +61,8 @@
   .dots i.f{background:var(--accent);opacity:1}
   .mini{text-align:center;font-size:13px;color:var(--muted);min-height:18px;margin-bottom:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .controls{display:flex;gap:10px;justify-content:center;align-items:center}
-  button.big{border:0;background:var(--accent);color:var(--accent-ink);font:700 18px "Space Grotesk",system-ui,sans-serif;padding:15px 38px;border-radius:16px;cursor:pointer;min-width:150px;box-shadow:0 8px 28px -10px var(--accent)}
-  button.big.sm{font-size:15px;padding:11px 20px;min-width:0;border-radius:12px}
+  button.big,a.big{border:0;background:var(--accent);color:var(--accent-ink);font:700 18px "Space Grotesk",system-ui,sans-serif;padding:15px 38px;border-radius:16px;cursor:pointer;min-width:150px;box-shadow:0 8px 28px -10px var(--accent)}
+  button.big.sm,a.big.sm{font-size:15px;padding:11px 20px;min-width:0;border-radius:12px}
   button.ghost,label.ghost,a.ghost{border:1px solid var(--line);background:var(--panel2);color:var(--ink);font:500 14px "Space Grotesk",system-ui,sans-serif;padding:13px 16px;border-radius:14px;cursor:pointer;display:inline-block}
   button.ghost.sm,label.ghost.sm,a.ghost.sm{padding:8px 12px;font-size:13px;border-radius:10px}
   button:active{transform:translateY(1px)}
@@ -98,7 +98,7 @@
   body.stage .mini{font-size:clamp(14px,1.5vw,30px);color:var(--ink);min-height:1.5em}
   body.stage .tab{font-size:clamp(14px,1.1vw,22px)}
   body.stage h2{font-size:clamp(18px,1.5vw,30px)}
-  body.stage #srcseg,body.stage .hint,body.stage #embedPane .row{display:none}
+  body.stage #srcseg,body.stage .card .hint,body.stage #embedPane .row{display:none}
   body.stage .nowpl{font-size:clamp(12px,1vw,20px)}
   body.stage .chip{font-size:clamp(13px,.95vw,19px)}
   body.stage #npArt{width:clamp(96px,11vw,220px);height:clamp(96px,11vw,220px)}
@@ -418,8 +418,13 @@
 <!-- LYRICS -->
 <dialog id="lyr">
   <div class="dlg">
-    <div class="dlg-h"><h2>Lyrics</h2><button class="big sm" id="lyrClose">Done</button></div>
+    <div class="dlg-h"><h2>Lyrics &amp; karaoke</h2><button class="big sm" id="lyrClose">Done</button></div>
     <p class="sub" id="lyrSong" style="font-size:16px;color:var(--ink)"></p>
+    <div class="testrow" style="margin-top:0">
+      <a class="big sm btnlink" id="lyrKaraoke" href="#" target="_blank" rel="noopener" style="color:var(--accent-ink);text-decoration:none;display:inline-block">🎤 Karaoke version on YouTube</a>
+    </div>
+    <p class="hint" style="margin-top:6px">Opens YouTube's results for this song's karaoke version in a new tab and pauses your music. Drag that tab onto the projector and press <b>F</b> on the video for full screen.</p>
+    <h3>Lyrics</h3>
     <div class="testrow" style="margin-top:0">
       <a class="ghost sm btnlink" id="lyrSpotify" href="#">Open in Spotify app</a>
       <a class="ghost sm btnlink" id="lyrGenius" href="#" target="_blank" rel="noopener">Genius</a>
@@ -1129,7 +1134,7 @@ renderPlUI();
 /* lyrics */
 function updateLyrBtns(){
   const ok = !!(curTrack && curTrack.uri && /^spotify:track:/.test(curTrack.uri));
-  ["lyrEmbed","lyrApp"].forEach(id => { $(id).disabled = !ok; $(id).title = ok ? "Lyrics" : "Play a song first"; });
+  ["lyrEmbed","lyrApp"].forEach(id => { $(id).disabled = !ok; $(id).title = ok ? "Lyrics & karaoke" : "Play a song first"; });
   if($("lyr").open) fillLyrics();
 }
 function fillLyrics(){
@@ -1141,12 +1146,20 @@ function fillLyrics(){
   const genius = "https://genius.com/search?q=" + encodeURIComponent(q);
   $("lyrGenius").href = genius;
   $("lyrMxm").href = "https://www.musixmatch.com/search?query=" + encodeURIComponent(q);
-  ["lyrGenius","lyrMxm"].forEach(x => $(x).hidden = !q);
+  $("lyrKaraoke").href = "https://www.youtube.com/results?search_query=" + encodeURIComponent(q + " karaoke");
+  ["lyrGenius","lyrMxm","lyrKaraoke"].forEach(x => $(x).hidden = !q);
   $("lyrQrWrap").hidden = !q;
   if(q) $("lyrQr").innerHTML = qrSvg(genius);
 }
 ["lyrEmbed","lyrApp"].forEach(id => $(id).onclick = () => { fillLyrics(); $("lyr").showModal(); });
 $("lyrClose").onclick = () => $("lyr").close();
+// pause the music so it doesn't play over the karaoke video
+$("lyrKaraoke").onclick = () => {
+  if(running) pause();
+  if(S.src === "embed" && controller && !musicPaused) controller.pause();
+  if(S.src === "app" && auth && np.playing) appCmd("PUT", "/me/player/pause");
+  $("lyr").close();
+};
 $("lyr").onclick = e => { if(e.target === $("lyr")) $("lyr").close(); };
 updateLyrBtns();
 
