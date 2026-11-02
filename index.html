@@ -19,6 +19,14 @@
   html,body{margin:0}
   body{min-height:100vh;background:var(--bg);color:var(--ink);font-family:"Space Grotesk",system-ui,sans-serif}
   #bg,#dim{position:fixed;inset:0;z-index:-2;transition:background .6s ease}
+  #viz{position:fixed;inset:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;opacity:0;transition:opacity .8s ease}
+  body.viz #viz{opacity:1}
+  body.viz .card{background:color-mix(in srgb,var(--panel-solid) 22%,transparent);backdrop-filter:none;-webkit-backdrop-filter:none;border-color:rgba(255,255,255,.14);transition:background .8s ease}
+  body.viz .time,body.viz .label,body.viz .clock,body.viz .np-title,body.viz .np-artist,body.viz .mini,body.viz h2,body.viz .nowpl,body.viz .sync-row b,body.viz .sync-sub{text-shadow:0 0 12px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.9)}
+  body.viz .prog{filter:drop-shadow(0 0 10px var(--accent))}
+  body.viz .ringbox{transition:transform .08s linear}
+  .vizbadge{display:none;z-index:5;position:fixed;left:50%;bottom:2.4vh;transform:translateX(-50%);font:700 clamp(14px,1.3vw,24px) "Space Grotesk",system-ui,sans-serif;letter-spacing:.3em;text-transform:uppercase;color:#fff;text-shadow:0 0 18px var(--accent),0 0 4px #000;pointer-events:none}
+  body.viz.vizprev .vizbadge{display:block}
   #dim{z-index:-1;background:#000;pointer-events:none}
   #bg.drift{background-size:400% 400% !important;animation:drift 28s ease infinite}
   @keyframes drift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
@@ -232,7 +240,7 @@
 </style>
 </head>
 <body>
-<div id="bg"></div><div id="dim"></div>
+<div id="bg"></div><div id="dim"></div><canvas id="viz"></canvas><div class="vizbadge" id="vizBadge">☕ Break time</div>
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
@@ -368,7 +376,7 @@
           </div>
         </div>
       </div>
-      <p class="hint"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>S</kbd> skip · <kbd>F</kbd> projector · <kbd>Q</kbd> big QR</p>
+      <p class="hint"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>S</kbd> skip · <kbd>F</kbd> projector · <kbd>Q</kbd> big QR · <kbd>V</kbd> visualizer · <kbd>T</kbd> tap tempo</p>
     </section>
   </div>
 </div>
@@ -480,6 +488,23 @@
       <div class="toggles">
         <label><input type="checkbox" id="s-breakPlaylist"> Switch to the break playlist on breaks, and back to the focus playlist when focus starts</label>
       </div>
+      <h3>Break visualizer</h3>
+      <div class="toggles" style="margin-top:0">
+        <label><input type="checkbox" id="s-viz"> Turn breaks into a rave: lasers, light beams and visualizers that move with the music</label>
+      </div>
+      <div class="sounds">
+        <label>Intensity<select id="s-vizLevel"><option value="chill">Chill</option><option value="party">Party</option><option value="rave">Rave</option></select></label>
+        <label>React to<select id="s-vizSrc"><option value="mic">The music (microphone)</option><option value="beat">A steady beat (tap T)</option></select></label>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="s-vizStrobe"> Strobe flashes (don't use if anyone is sensitive to flashing lights)</label>
+      </div>
+      <div class="testrow">
+        <button class="ghost sm" id="vizMic">🎤 Allow microphone</button>
+        <button class="ghost sm" id="vizPrev">▶ Preview (V)</button>
+      </div>
+      <p class="hint" id="vizMsg">The page can't hear Spotify directly, so it listens to the speakers through the projector computer's microphone. No audio is recorded or sent anywhere.</p>
+
       <h3>Music during the timer</h3>
       <div class="toggles" style="margin-top:0">
         <label><input type="checkbox" id="s-breakmusic"> Keep music playing on breaks (when not switching playlists)</label>
@@ -600,6 +625,7 @@ const MODE_IDX = {focus:0, short:1, long:2};
 const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              focusSound:"chime", breakSound:"bell", volume:70, repeat:1, jamLink:"",
              clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
+             viz:true, vizLevel:"party", vizSrc:"mic", vizStrobe:false, vizBpm:124,
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -761,6 +787,7 @@ function renderTime(){
   if($("syncBig").open){ $("sbTime").textContent = fmt(remaining); $("sbLabel").textContent = LABELS[mode] + (running ? "" : " · paused"); }
 }
 function render(){
+  if(typeof vizUpdate === "function") vizUpdate();
   $("label").textContent = LABELS[mode];
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.m === mode));
   $("go").textContent = running ? "Pause" : (remaining < total(mode) ? "Resume" : "Start");
@@ -1329,7 +1356,7 @@ checks.forEach(k => {
 });
 
 /* customize dialog */
-$("lookOpen").onclick = () => { renderLookUI(); renderPlUI(); $("look").showModal(); };
+$("lookOpen").onclick = () => { renderLookUI(); renderPlUI(); renderVizUI(); $("look").showModal(); };
 $("dlgTabs").onclick = e => {
   const b = e.target.closest("button"); if(!b) return;
   document.querySelectorAll("#dlgTabs button").forEach(x => x.classList.toggle("on", x === b));
@@ -1392,6 +1419,8 @@ document.addEventListener("keydown", e => {
   else if(e.key === "r" || e.key === "R") $("reset").click();
   else if(e.key === "s" || e.key === "S") $("skip").click();
   else if(e.key === "f" || e.key === "F") toggleStage();
+  else if(e.key === "v" || e.key === "V") vizTogglePreview();
+  else if(e.key === "t" || e.key === "T") vizTap();
 });
 document.addEventListener("visibilitychange", () => { if(!document.hidden && S.src === "app" && auth && Date.now() - lastPoll > 4000) poll(); });
 
@@ -1634,6 +1663,216 @@ $("syncBig").onclick = e => { if(e.target === $("syncBig")) $("syncBig").close()
 $("s-phoneSync").checked = S.phoneSync;
 $("s-phoneSync").onchange = e => { S.phoneSync = e.target.checked; save(); startHost(); };
 $("syncNew").onclick = () => { S.syncCode = newCode(); save(); startHost(); };
+
+/* ================= break visualizer ================= */
+// Everything is drawn on one full-screen canvas behind the cards. Audio comes from the microphone
+// (the page can't read Spotify's audio), or from a synthetic beat at a tap-able tempo.
+var vizOn = false, vizPreview = false, vizRaf = 0, vizCtx = null, vizW = 0, vizH = 0, vizDpr = 1;
+var vizMicStream = null, vizAnalyser = null, vizFreq = null, vizWave = null, vizMicFailed = false;
+var vizBassAvg = 0, vizLastBeat = 0, vizBeat = 0, vizFlash = 0, vizLastFlash = 0, vizParts = [], vizTaps = [], vizHue = 0;
+const VIZ_LEVEL = {chill:{lasers:0, parts:0, bars:.55, glow:.5, speed:.4}, party:{lasers:4, parts:22, bars:.85, glow:.8, speed:1}, rave:{lasers:8, parts:44, bars:1, glow:1, speed:1.6}};
+
+function vizResize(){
+  const cv = $("viz");
+  vizDpr = Math.min(1.5, window.devicePixelRatio || 1);
+  vizW = innerWidth; vizH = innerHeight;
+  cv.width = Math.round(vizW*vizDpr); cv.height = Math.round(vizH*vizDpr);
+  vizCtx = cv.getContext("2d"); vizCtx.setTransform(vizDpr,0,0,vizDpr,0,0);
+}
+addEventListener("resize", () => { if(vizOn) vizResize(); });
+
+async function vizStartMic(fromClick){
+  if(vizMicStream || S.vizSrc !== "mic") return !!vizMicStream;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ vizMicFailed = true; vizMsg("This browser can't use the microphone here, so the visualizer follows a steady beat."); return false; }
+  try{
+    // switch off voice processing, which would otherwise try to filter the music out
+    vizMicStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
+    unlockAudio();
+    const src = actx.createMediaStreamSource(vizMicStream);
+    vizAnalyser = actx.createAnalyser(); vizAnalyser.fftSize = 1024; vizAnalyser.smoothingTimeConstant = .75;
+    src.connect(vizAnalyser);   // not connected to the speakers, so there's no feedback
+    vizFreq = new Uint8Array(vizAnalyser.frequencyBinCount); vizWave = new Uint8Array(vizAnalyser.fftSize);
+    vizMicFailed = false; vizMsg("🎤 Listening to the music. Visuals react to what the microphone hears.");
+    return true;
+  }catch(e){
+    vizMicFailed = true;
+    vizMsg(fromClick ? "Microphone blocked. Allow it in the browser's address bar (🔒 icon), or the visualizer will follow a steady beat." : "No microphone access yet, so the visualizer follows a steady beat. Click “Allow microphone” in Customize → Music.");
+    return false;
+  }
+}
+function vizStopMic(){ if(vizMicStream){ vizMicStream.getTracks().forEach(t => t.stop()); vizMicStream = null; vizAnalyser = null; } }
+function vizMsg(t){ $("vizMsg").textContent = t; }
+
+// tap tempo: press T in time with the music
+function vizTap(){
+  const now = performance.now();
+  vizTaps = vizTaps.filter(t => now - t < 3000); vizTaps.push(now);
+  if(vizTaps.length >= 3){
+    const gaps = vizTaps.slice(1).map((t,i) => t - vizTaps[i]);
+    const bpm = Math.round(60000 / (gaps.reduce((a,b) => a+b, 0) / gaps.length));
+    if(bpm >= 60 && bpm <= 200){ S.vizBpm = bpm; save(); vizMsg(`Beat set to ${bpm} BPM.`); }
+  }
+  vizLastBeat = 0;   // the beat lines up with your latest tap
+  vizBeatAt = now;
+}
+var vizBeatAt = performance.now();
+
+function vizActive(){ return !SYNC && S.viz && ((isBreak() && running) || vizPreview); }
+function vizUpdate(){
+  const want = vizActive();
+  document.body.classList.toggle("viz", want);
+  document.body.classList.toggle("vizprev", want && vizPreview && !(isBreak() && running));
+  $("vizBadge").textContent = vizPreview && !(isBreak() && running) ? "Visualizer preview · press V to stop" : "☕ " + LABELS[mode];
+  if(want && !vizOn){
+    vizOn = true; vizResize(); vizParts = [];
+    if(S.vizSrc === "mic") vizStartMic(false);
+    vizRaf = requestAnimationFrame(vizFrame);
+  } else if(!want && vizOn){
+    vizOn = false; cancelAnimationFrame(vizRaf);
+    vizCtx && vizCtx.clearRect(0, 0, vizW, vizH);
+    $$ringReset();
+    vizStopMic();   // don't keep the microphone open while you work
+  }
+}
+function $$ringReset(){ const rb = document.querySelector(".wrap .ringbox"); if(rb) rb.style.transform = ""; }
+function vizTogglePreview(){ vizPreview = !vizPreview; vizUpdate(); }
+
+// Returns {bands:[0..1]x64, bass, mid, high, beat:true/false}
+function vizAudio(now){
+  const N = 64, bands = new Array(N).fill(0);
+  let bass = 0, mid = 0, high = 0, beat = false;
+  if(vizAnalyser && !vizMicFailed){
+    vizAnalyser.getByteFrequencyData(vizFreq);
+    // log-spaced bands from ~40 Hz to ~14 kHz
+    const nyq = actx.sampleRate/2, bins = vizFreq.length;
+    for(let i = 0; i < N; i++){
+      const f0 = 40*Math.pow(350, i/N), f1 = 40*Math.pow(350, (i+1)/N);
+      let a = Math.floor(f0/nyq*bins), b = Math.max(a+1, Math.ceil(f1/nyq*bins)), sum = 0;
+      for(let k = a; k < b && k < bins; k++) sum += vizFreq[k];
+      bands[i] = Math.min(1, (sum/(b-a))/255 * (1 + i/N*.8));
+    }
+    bass = (bands[0]+bands[1]+bands[2]+bands[3]+bands[4]+bands[5])/6;
+    mid = bands.slice(16, 40).reduce((a,b) => a+b, 0)/24;
+    high = bands.slice(40).reduce((a,b) => a+b, 0)/24;
+    // beat = bass jumps well above its recent average
+    vizBassAvg = vizBassAvg*.94 + bass*.06;
+    if(bass > vizBassAvg*1.28 + .04 && bass > .28 && now - vizLastBeat > 230){ beat = true; vizLastBeat = now; }
+  } else {
+    // synthetic music at the chosen tempo
+    const period = 60000/(S.vizBpm || 124), ph = ((now - vizBeatAt) % period + period) % period / period;
+    if(now - vizLastBeat > period*.6 && ph < .12){ beat = true; vizLastBeat = now; }
+    const kick = Math.pow(1 - ph, 4), t = now/1000;
+    for(let i = 0; i < N; i++){
+      const x = i/N;
+      bands[i] = Math.max(0, Math.min(1, kick*(1-x)*.95 + .22 + .18*Math.sin(t*3.1 + i*.45) * Math.sin(t*1.3 + i*.13) + .1*Math.sin(t*7 + i) - x*.25));
+    }
+    bass = kick*.9 + .1; mid = .35 + .15*Math.sin(t*2); high = .25 + .1*Math.sin(t*5);
+  }
+  return {bands, bass, mid, high, beat};
+}
+
+function vizFrame(now){
+  if(!vizOn) return;
+  vizRaf = requestAnimationFrame(vizFrame);
+  const L = VIZ_LEVEL[S.vizLevel] || VIZ_LEVEL.party, a = vizAudio(now), c = vizCtx, W = vizW, H = vizH;
+  if(a.beat){ vizBeat = 1; if(S.vizStrobe && S.vizLevel !== "chill" && now - vizLastFlash > 340){ vizFlash = 1; vizLastFlash = now; } }   // never more than ~3 flashes a second
+  vizBeat *= .9; vizFlash *= .78;
+  vizHue = (vizHue + .25*L.speed + a.high*1.5*L.speed) % 360;
+  const acc = colors().accent, hue = vizHue;
+
+  c.globalCompositeOperation = "source-over";
+  c.clearRect(0, 0, W, H);
+
+  // where the timer ring is, so things orbit it
+  const ring = document.querySelector(".wrap .ringbox"), rr = ring ? ring.getBoundingClientRect() : {left:W/2-100, top:H/2-100, width:200, height:200};
+  const cx = rr.left + rr.width/2, cy = rr.top + rr.height/2, R = rr.width/2;
+
+  c.globalCompositeOperation = "lighter";
+
+  // 1. bass glow behind everything
+  const g = c.createRadialGradient(cx, cy, R*.3, cx, cy, Math.max(W, H)*.75);
+  g.addColorStop(0, `hsla(${hue},95%,60%,${(.18 + a.bass*.5)*L.glow})`);
+  g.addColorStop(.45, `hsla(${(hue+60)%360},90%,50%,${(.06 + a.bass*.18)*L.glow})`);
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+
+  // 2. laser beams sweeping from the top corners
+  for(let i = 0; i < L.lasers; i++){
+    const left = i % 2 === 0, ox = left ? 0 : W, oy = -10;
+    const sweep = Math.sin(now/1000*(.55 + i*.11)*L.speed + i*1.7);
+    const ang = (left ? Math.PI*.25 : Math.PI*.75) + sweep*.55;
+    const len = Math.hypot(W, H)*1.2, ex = ox + Math.cos(ang)*len, ey = oy + Math.sin(ang)*len;
+    const hh = (hue + i*45) % 360, width = 1.5 + a.mid*4 + vizBeat*6;
+    c.strokeStyle = `hsla(${hh},100%,60%,${.25 + a.mid*.4 + vizBeat*.3})`; c.lineWidth = width*3; c.lineCap = "round";
+    c.beginPath(); c.moveTo(ox, oy); c.lineTo(ex, ey); c.stroke();
+    c.strokeStyle = `hsla(${hh},100%,88%,${.5 + vizBeat*.4})`; c.lineWidth = Math.max(1, width*.5);
+    c.beginPath(); c.moveTo(ox, oy); c.lineTo(ex, ey); c.stroke();
+  }
+
+  // 3. circular spectrum around the timer ring (mirrored so it's symmetric)
+  const n = a.bands.length*2;
+  for(let i = 0; i < n; i++){
+    const v = a.bands[i < n/2 ? i : n-1-i], ang = -Math.PI/2 + i/n*Math.PI*2;
+    const r0 = R*1.04 + vizBeat*R*.04, r1 = r0 + 6 + v*R*.55*L.bars;
+    c.strokeStyle = `hsla(${(hue + i/n*240) % 360},100%,${55 + v*25}%,${.55 + v*.45})`;
+    c.lineWidth = Math.max(2, R*Math.PI*2/n*.55); c.lineCap = "round";
+    c.beginPath(); c.moveTo(cx + Math.cos(ang)*r0, cy + Math.sin(ang)*r0); c.lineTo(cx + Math.cos(ang)*r1, cy + Math.sin(ang)*r1); c.stroke();
+  }
+
+  // 4. equalizer bars along the bottom, mirrored from the middle
+  const bw = W/(a.bands.length*2);
+  for(let i = 0; i < a.bands.length; i++){
+    const v = a.bands[i], h = v*H*.28*L.bars + 2;
+    c.fillStyle = `hsla(${(hue + 180 + i*3) % 360},100%,60%,${.35 + v*.5})`;
+    c.fillRect(W/2 + i*bw + 1, H - h, bw - 2, h);
+    c.fillRect(W/2 - (i+1)*bw + 1, H - h, bw - 2, h);
+  }
+
+  // 5. waveform line across the middle (microphone only)
+  if(vizAnalyser && !vizMicFailed && S.vizLevel !== "chill"){
+    vizAnalyser.getByteTimeDomainData(vizWave);
+    c.strokeStyle = `hsla(${(hue+120)%360},100%,70%,.55)`; c.lineWidth = 2; c.beginPath();
+    for(let i = 0; i < vizWave.length; i += 4){ const x = i/vizWave.length*W, y = H*.5 + (vizWave[i]-128)/128*H*.18; i ? c.lineTo(x, y) : c.moveTo(x, y); }
+    c.stroke();
+  }
+
+  // 6. particles burst out of the ring on each beat
+  if(a.beat) for(let i = 0; i < L.parts; i++){
+    const ang = Math.random()*Math.PI*2, sp = 2 + Math.random()*6*(.5 + a.bass);
+    vizParts.push({x:cx + Math.cos(ang)*R, y:cy + Math.sin(ang)*R, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp, life:1, h:(hue + Math.random()*90) % 360, s:2 + Math.random()*4});
+  }
+  vizParts = vizParts.filter(p => (p.life -= .016) > 0);
+  if(vizParts.length > 400) vizParts.splice(0, vizParts.length - 400);
+  for(const p of vizParts){
+    p.x += p.vx; p.y += p.vy; p.vx *= .985; p.vy = p.vy*.985 + .03;
+    c.fillStyle = `hsla(${p.h},100%,65%,${p.life})`;
+    c.beginPath(); c.arc(p.x, p.y, p.s*p.life + .5, 0, Math.PI*2); c.fill();
+  }
+
+  // 7. strobe (optional, capped at ~3 flashes per second)
+  if(vizFlash > .02){ c.globalCompositeOperation = "source-over"; c.fillStyle = `rgba(255,255,255,${vizFlash*.35})`; c.fillRect(0, 0, W, H); }
+
+  // the timer ring thumps with the bass
+  if(ring) ring.style.transform = `scale(${1 + vizBeat*.035*L.bars + a.bass*.015})`;
+}
+
+// settings
+function renderVizUI(){
+  $("s-viz").checked = S.viz; $("s-vizLevel").value = S.vizLevel; $("s-vizSrc").value = S.vizSrc; $("s-vizStrobe").checked = S.vizStrobe;
+  $("vizMic").hidden = S.vizSrc !== "mic";
+  $("vizPrev").textContent = vizPreview ? "■ Stop preview (V)" : "▶ Preview (V)";
+}
+$("s-viz").onchange = e => { S.viz = e.target.checked; save(); vizUpdate(); };
+$("s-vizLevel").onchange = e => { S.vizLevel = e.target.value; save(); };
+$("s-vizStrobe").onchange = e => { S.vizStrobe = e.target.checked; save(); };
+$("s-vizSrc").onchange = e => {
+  S.vizSrc = e.target.value; save(); renderVizUI();
+  if(S.vizSrc === "beat"){ vizStopMic(); vizMicFailed = false; vizMsg(`Following a steady beat at ${S.vizBpm} BPM. Press T a few times in time with the music to match it.`); }
+  else if(vizOn) vizStartMic(true);
+};
+$("vizMic").onclick = async () => { unlockAudio(); const ok = await vizStartMic(true); if(ok && !vizOn) vizStopMic(); };
+$("vizPrev").onclick = () => { vizTogglePreview(); renderVizUI(); $("look").close(); };
+renderVizUI();
 
 /* ================= start up ================= */
 (async function init(){
