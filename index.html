@@ -37,7 +37,10 @@
   .endmsg-s{margin-top:2.2vh;font:500 clamp(16px,1.8vw,34px) "Space Grotesk",system-ui,sans-serif;color:rgba(255,255,255,.75);letter-spacing:.08em;text-transform:uppercase}
   .viztoast{position:fixed;left:50%;top:14vh;transform:translateX(-50%);z-index:7;background:rgba(0,0,0,.72);color:#fff;font:700 clamp(15px,1.4vw,26px) "Space Grotesk",system-ui,sans-serif;padding:.6em 1.1em;border-radius:14px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
   .viztoast.on{opacity:1}
-  .vizconnect{display:none;position:fixed;left:0;right:0;bottom:16vh;margin:0 auto;width:max-content;max-width:90vw;z-index:6;box-shadow:0 10px 40px -8px var(--accent),0 0 0 4px rgba(0,0,0,.35) !important;font-size:clamp(15px,1.3vw,24px) !important;padding:.9em 1.4em !important}
+  .vizconnect-wrap{display:none;position:fixed;left:27vw;bottom:5vh;transform:translateX(-50%);z-index:6}
+  body.viz.needsound .vizconnect-wrap{display:block}
+  @media (max-width:820px){ .vizconnect-wrap{left:50vw} }
+  .vizconnect{display:none;width:max-content;max-width:90vw;box-shadow:0 10px 40px -8px var(--accent),0 0 0 4px rgba(0,0,0,.35) !important;font-size:clamp(15px,1.3vw,24px) !important;padding:.9em 1.4em !important}
   body.viz.needsound .vizconnect{display:block}
   body.viz.needsound.idle .vizconnect{display:block;opacity:1;cursor:pointer}
   #dim{z-index:-1;background:#000;pointer-events:none}
@@ -80,7 +83,7 @@
   .dots{display:flex;gap:8px;justify-content:center;margin-bottom:14px}
   .dots i{width:10px;height:10px;border-radius:50%;border:2px solid var(--accent);opacity:.7}
   .dots i.f{background:var(--accent);opacity:1}
-  .mini{text-align:center;font-size:13px;color:var(--muted);min-height:18px;margin-bottom:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mini{text-align:center;font-size:13px;color:var(--muted);min-height:18px;margin-bottom:14px;overflow-wrap:anywhere;line-height:1.3}
   .controls{display:flex;gap:10px;justify-content:center;align-items:center}
   button.big,a.big{border:0;background:var(--accent);color:var(--accent-ink);font:700 18px "Space Grotesk",system-ui,sans-serif;padding:15px 38px;border-radius:16px;cursor:pointer;min-width:150px;box-shadow:0 8px 28px -10px var(--accent)}
   button.big.sm,a.big.sm{font-size:15px;padding:11px 20px;min-width:0;border-radius:12px}
@@ -171,8 +174,8 @@
   #npArt{width:96px;height:96px;border-radius:12px;object-fit:cover;background:var(--panel2);flex:none;box-shadow:0 10px 30px -12px rgba(0,0,0,.6)}
   .np-meta{min-width:0}
   .np-kicker{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.12em;margin-bottom:4px}
-  .np-title{font-size:19px;font-weight:700;line-height:1.2;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-  .np-artist{color:var(--muted);font-size:14px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .np-title{font-size:19px;font-weight:700;line-height:1.2;overflow-wrap:anywhere}
+  .np-artist{color:var(--muted);font-size:14px;margin-top:3px;overflow-wrap:anywhere;line-height:1.3}
   .bar{height:5px;background:var(--panel2);border-radius:5px;margin-top:16px;overflow:hidden}
   .bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:5px}
   .np-times{display:flex;justify-content:space-between;font:12px "JetBrains Mono",monospace;color:var(--muted);margin-top:6px}
@@ -250,6 +253,24 @@
   .crew-row .gl.done{color:var(--accent);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--accent) 60%,transparent)}
   .crew-row .mn{font:600 13px "JetBrains Mono",monospace;color:var(--muted);white-space:nowrap}
   .crew-empty{font-size:14px;color:var(--muted);line-height:1.5}
+  /* densities, picked automatically so everyone fits without scrolling */
+  .crew-list.d1{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start}
+  .crew-list.d2{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:5px;align-content:start}
+  .crew-list.d2 .crew-row{padding:4px 8px;grid-template-columns:24px 1fr auto;gap:6px}
+  .crew-list.d2 .crew-row > div{display:flex;gap:6px;align-items:baseline}
+  .crew-list.d2 .nm{flex:none} .crew-list.d2 .gl{flex:1;min-width:0}
+  .crew-list.d3{display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;align-content:flex-start}
+  .crew-list.d3 .crew-row{display:flex;gap:6px;padding:4px 12px;border-radius:999px}
+  .crew-list.d3 .gl,.crew-list.d3 .mn{display:none}
+  .crew-list.d4{display:flex;flex-direction:row;flex-wrap:wrap;gap:4px;align-content:flex-start}
+  .crew-list.d4 .crew-row{display:flex;gap:4px;padding:2px 9px;border-radius:999px}
+  .crew-list.d4 .gl,.crew-list.d4 .mn{display:none}
+  .crew-list.d4 .nm{font-size:12px !important} .crew-list.d4 .em{font-size:13px !important}
+  .crew-list.d2 .crew-row.off,.crew-list.d3 .crew-row.off,.crew-list.d4 .crew-row.off{display:none}
+  body.stage .crew-list.d2 .nm,body.stage .crew-list.d3 .nm{font-size:clamp(13px,.95vw,19px)}
+  body.stage .crew-list.d2 .gl{font-size:clamp(12px,.85vw,17px)}
+  body.stage .crew-list.d2 .em,body.stage .crew-list.d3 .em{font-size:clamp(15px,1.1vw,22px)}
+  body.stage.crew{overflow:hidden}
   .jail{background:color-mix(in srgb,#ff3b3b 22%,transparent);border:1px solid color-mix(in srgb,#ff3b3b 55%,transparent);border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:14px}
   .jail b{color:#ff8a8a}
   body.stage .crew-row .nm{font-size:clamp(14px,1.1vw,22px)} body.stage .crew-row .gl{font-size:clamp(13px,.95vw,19px)}
@@ -264,7 +285,22 @@
   body.stage.crew #crewCard{display:flex;flex-direction:column;min-height:0;margin-bottom:0;align-self:stretch;overflow:hidden}
   body.stage.crew .ringbox{width:min(52vh,40vw)}
   body.stage.crew #crewCard[hidden]{display:none}
-  body.stage.crew .crew-list{flex:1;max-height:none;scrollbar-width:none}
+  body.stage.crew .crew-list{flex:1;min-height:0;max-height:none;scrollbar-width:none}
+  body.stage.crew .mini{display:none}   /* the music card already shows the song */
+  /* projector + crew: song and QR side by side, so the crew list gets the room */
+  body.stage.crew #musicCard{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:clamp(14px,1.6vw,32px);align-items:start}
+  body.stage.crew #musicCard > h2{display:none}
+  body.stage.crew #musicCard > *{grid-column:1}
+  body.stage.crew #musicCard > #syncBox,body.stage.crew #musicCard > #jamBox{grid-column:2;grid-row:1 / span 8;margin:0;padding:0;border:0;align-self:center}
+  body.stage.crew #syncBox .sync-row{flex-direction:column;align-items:center;text-align:center;gap:6px}
+  body.stage.crew #syncBox .sync-row b{font-size:clamp(13px,1.05vw,21px)}
+  body.stage.crew #syncBox .sync-sub{font-size:clamp(11px,.8vw,16px)}
+  body.stage.crew #syncBox .sync-row button{margin-top:4px !important}
+  body.stage.crew #crewCard{position:relative}
+  body.stage.crew #boothRow{position:absolute;top:8px;right:12px;margin:0 !important;z-index:2}
+  body.stage.crew .crew-h{padding-right:0}
+  body.stage.crew .np-title{font-size:clamp(15px,1.45vw,30px)}
+  body.stage.crew .np-artist{font-size:clamp(12px,1vw,20px)}
   body.stage.crew .crew-list::-webkit-scrollbar{display:none}
   body.stage.crew .sync-row .qrmini{width:clamp(100px,min(9vw,16vh),200px);height:clamp(100px,min(9vw,16vh),200px)}
   body.stage.crew #embedPane .musicstate{display:none}
@@ -344,6 +380,22 @@
   .phdown b{font-size:40px}
   .ph-down{margin-top:10px;font-size:13px;color:var(--muted)}
 
+  /* album (phones + projector) */
+  .album{position:fixed;inset:0;z-index:11;background:rgba(0,0,0,.94);color:#fff;overflow:auto}
+  .album[hidden]{display:none}
+  .album-h{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;background:rgba(0,0,0,.85);backdrop-filter:blur(8px)}
+  .album-h b{font-size:20px} .album-h .cnt{color:rgba(255,255,255,.65);font-size:14px;flex:1}
+  .album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;padding:6px 12px 30px}
+  body:not(.phone) .album-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;padding:10px 24px 40px}
+  .album-grid button{position:relative;padding:0;border:0;background:#222;border-radius:10px;overflow:hidden;aspect-ratio:1;cursor:pointer}
+  .album-grid img{width:100%;height:100%;object-fit:cover;display:block}
+  .album-grid span{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 4px;font-size:11px;text-align:left;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff}
+  .album-msg{padding:0 16px 20px;color:rgba(255,255,255,.7)}
+  .album-view{position:fixed;inset:0;z-index:2;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px}
+  .album-view[hidden]{display:none}
+  .album-view img{max-width:100%;max-height:calc(100% - 120px);object-fit:contain;border-radius:8px}
+  .album-cap{color:rgba(255,255,255,.75);font-size:14px}
+
   /* phone view (?sync=CODE) */
   body.phone .wrap{display:none}
   #phone{max-width:460px;margin:0 auto;padding:18px 16px 40px;min-height:100vh;display:flex;flex-direction:column;gap:16px}
@@ -369,7 +421,7 @@
 </style>
 </head>
 <body>
-<div id="bg"></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button>
+<div id="bg"></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><div class="vizconnect-wrap"><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button></div>
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
@@ -415,7 +467,7 @@
     </section>
 
     <!-- MUSIC -->
-    <section class="card">
+    <section class="card" id="musicCard">
       <h2>The jams</h2>
       <div class="seg" id="srcseg">
         <button data-src="embed">Built-in player</button>
@@ -512,10 +564,24 @@
     <!-- CREW -->
     <section class="card" id="crewCard" hidden>
       <div class="crew-h"><h2>👥 The crew</h2><span class="crew-tot" id="crewTot"></span></div>
-      <div class="testrow" id="boothRow" style="margin:-4px 0 10px"><button class="ghost sm" id="boothBtn" title="Take a group photo with this computer's camera (P)">📸 Group photo</button></div>
+      <div class="testrow" id="boothRow" style="margin:-4px 0 10px"><button class="ghost sm" id="boothBtn" title="Take a group photo with this computer's camera (P)">📸 Group photo</button><button class="ghost sm" id="albumBtn" title="See tonight's photos (A)">🖼 Album</button></div>
       <div class="jail" id="jailBox" hidden></div>
       <div class="crew-list" id="crewList"></div>
     </section>
+  </div>
+</div>
+
+<!-- ALBUM -->
+<div class="album" id="album" hidden>
+  <div class="album-h"><b>📸 Album</b><span class="cnt" id="albumCount"></span>
+    <button class="ghost sm" id="albumZip" hidden>⬇ Download all (.zip)</button>
+    <button class="big sm" id="albumClose">Close</button></div>
+  <div class="album-grid" id="albumGrid"></div>
+  <div class="album-msg" id="albumMsg"></div>
+  <div class="album-view" id="albumView" hidden>
+    <img id="albumImg" alt="">
+    <div class="album-cap" id="albumCap"></div>
+    <div class="testrow"><a class="big sm btnlink" id="albumSave" download="photo.jpg" style="color:var(--accent-ink)">⬇ Save photo</a><button class="ghost sm" id="albumBack">← Back</button></div>
   </div>
 </div>
 
@@ -616,6 +682,7 @@
         <button class="big sm" id="phCamBtn">📷 Take a photo</button>
         <label class="ghost sm" id="phPickLbl">🖼 From gallery<input type="file" id="phPhotoIn" accept="image/*" multiple hidden></label>
       </div>
+      <button class="ghost sm" id="phAlbumBtn" style="width:100%;margin-top:8px">📸 See the album</button>
       <div class="hint" id="phPhotoMsg" style="margin-top:6px"></div>
     </div>
   </div>
@@ -1935,7 +2002,8 @@ $("imgfile").onchange = e => {
 
 document.addEventListener("keydown", e => {
   if($("endMsgBox").classList.contains("on") && (e.key === "Escape" || e.key === "Enter" || e.key === " ")){ e.preventDefault(); hideEndMsg(); return; }
-  if(!$("cam").hidden) return;
+  if(!$("cam").hidden || !$("album").hidden) return;
+  if((e.key === "a" || e.key === "A") && !e.target.matches("input,select") && !document.querySelector("dialog[open]") && S.gPhotos){ albumOpen("projector"); return; }
   if((e.key === "p" || e.key === "P") && !e.target.matches("input,select") && !document.querySelector("dialog[open]")){ $("boothBtn").click(); return; }
   if((e.key === "q" || e.key === "Q") && !e.target.matches("input,select")){
     if($("syncBig").open) $("syncBig").close(); else if(!document.querySelector("dialog[open]")) openSyncBig();
@@ -1958,7 +2026,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden && S.s
 /* ================= phone sync ================= */
 // The projector is a PeerJS "host"; each phone connects to it directly (WebRTC) using the code in the QR.
 const PEER_PREFIX = "focusjams-";
-var peer = null, conns = new Set(), syncT = null, syncReady = false, peerRetry = null;   // var: used before this section runs
+var peer = null, conns = new Set(), syncT = null, syncReady = false, peerRetry = null, connAlive = new Map();   // var: used before this section runs
 const peerOpts = () => Object.assign({debug:0}, window.FJ_PEER_OPTS || {});
 function loadPeerJs(){
   return new Promise((res, rej) => {
@@ -2040,8 +2108,8 @@ async function startHost(){
   const p = peer = new Peer(PEER_PREFIX + S.syncCode, peerOpts());
   p.on("open", () => { if(p !== peer) return; syncReady = true; renderSyncBox(); });
   p.on("connection", c => {
-    c.on("open", () => { conns.add(c); renderSyncBox(); c.send(syncState()); });
-    c.on("data", d => groupMsg(d, c));
+    c.on("open", () => { conns.add(c); connAlive.set(c, Date.now()); renderSyncBox(); c.send(syncState()); });
+    c.on("data", d => { connAlive.set(c, Date.now()); groupMsg(d, c); });
     c.on("close", () => { conns.delete(c); groupConnClosed(c); renderSyncBox(); });
     c.on("error", () => { conns.delete(c); groupConnClosed(c); renderSyncBox(); });
   });
@@ -2072,6 +2140,18 @@ async function startHost(){
   });
 }
 setInterval(broadcast, 10000);   // heartbeat keeps phones' clocks lined up
+// Phones that lock, lose Wi-Fi or close the tab often never say goodbye, so drop connections that go quiet.
+// (Phones send a small "ping" every 10s over their connection.)
+function dropConn(c){ conns.delete(c); connAlive.delete(c); try{ c.close(); }catch(e){} groupConnClosed(c); }
+setInterval(() => {
+  if(SYNC) return;
+  const now = Date.now(); let changed = false;
+  for(const c of Array.from(conns)){
+    const quiet = now - (connAlive.get(c) || 0), ice = c.peerConnection && c.peerConnection.iceConnectionState;
+    if(!c.open || quiet > 35000 || ice === "failed" || ice === "closed" || (ice === "disconnected" && quiet > 12000)){ dropConn(c); changed = true; }
+  }
+  if(changed) renderSyncBox();
+}, 5000);
 
 /* ----- phone side ----- */
 var phState = null, phEnd = 0, phConn = null, phPeer = null, phRetry = null, phLastMode = null;
@@ -2112,16 +2192,21 @@ function phApply(st, via){
 function phTick(){
   if(!phState) return;
   const rem = phState.running ? Math.max(0, phEnd - Date.now()) : phState.remaining;
+  // ran out but no new session yet: say so instead of sitting on 00:00
+  if(phState.running && Date.now() - phEnd > 1500) $("phLabel").textContent = "Syncing…";
   $("phTime").textContent = fmt(rem/1000);
   $("phProg").style.strokeDashoffset = C * (1 - rem/phState.total);
   document.title = fmt(rem/1000) + " · " + phState.label;
 }
+var relayES = null;
 function startRelay(){
-  let es;
   const open = () => {
-    try{ es = new EventSource(RELAY() + "/" + relayTopic(SYNC) + "/sse?since=latest"); }catch(e){ return; }
-    es.onopen = () => { relayOpen = true; };
+    if(relayES) try{ relayES.close(); }catch(e){}
+    let es;
+    try{ es = relayES = new EventSource(RELAY() + "/" + relayTopic(SYNC) + "/sse?since=latest"); }catch(e){ return; }
+    es.onopen = () => { if(es === relayES) relayOpen = true; };
     es.onmessage = e => {
+      if(es !== relayES) return;
       relayOpen = true;
       let m; try{ m = JSON.parse(e.data); }catch(err){ return; }
       if(m.event !== "message" || !m.message) return;
@@ -2129,10 +2214,12 @@ function startRelay(){
       phApply(st, "relay");
     };
     es.onerror = () => {
+      if(es !== relayES) return;
       relayOpen = false;
       if(es.readyState === 2){ setTimeout(open, 10000); }   // closed for good: start over in a bit
     };
   };
+  window.relayRestart = open;   // a fresh stream also re-sends the latest state ("since=latest")
   open();
 }
 async function startPhone(){
@@ -2186,8 +2273,36 @@ async function startPhone(){
     setTimeout(() => { if(c === phConn && !c.open){ try{ c.close(); }catch(e){} phConn = null; connect(); } }, 15000);
   };
   connect();
-  // phones drop connections when the screen locks; reconnect when it wakes
-  document.addEventListener("visibilitychange", () => { if(!document.hidden && !(phConn && phConn.open)) connect(); });
+  // "Resync": throw away anything that might be stale and fetch the newest state both ways.
+  let lastResync = 0;
+  window.phResync = force => {
+    if(!force && Date.now() - lastResync < 8000) return;
+    lastResync = Date.now();
+    if(window.relayRestart) relayRestart();
+    if(phConn && (!phConn.open || Date.now() - lastData > 20000)){ try{ phConn.close(); }catch(e){} phConn = null; }
+    if(phPeer && phPeer.destroyed) phPeer = null;
+    else if(phPeer && phPeer.disconnected){ try{ phPeer.reconnect(); }catch(e){ try{ phPeer.destroy(); }catch(err){} phPeer = null; } }
+    connect();
+  };
+  // Stuck? The countdown ran out a few seconds ago but no new session arrived, or the direct connection went quiet.
+  setInterval(() => {
+    if(document.hidden) return;
+    const overdue = phState && phState.running && Date.now() - phEnd > 4000;
+    const quiet = phConn && phConn.open && Date.now() - lastData > 25000;
+    const lostSignal = phPeer && phPeer.disconnected && !phPeer.destroyed;
+    if(overdue || quiet || lostSignal) phResync();
+  }, 3000);
+  // tell the projector we're still here (it drops connections that go quiet)
+  setInterval(() => { if(phConn && phConn.open) try{ phConn.send({t:"ping", from:me.id}); }catch(e){} }, 10000);
+  // phones pause pages while the screen is off; on waking up, resync if we were away more than a few seconds
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if(document.hidden){ hiddenAt = Date.now(); return; }
+    if(Date.now() - hiddenAt > 5000) phResync(true);
+    else if(!(phConn && phConn.open)) connect();
+  });
+  addEventListener("pageshow", e => { if(e.persisted) phResync(true); });   // restored from the back/forward cache
+  addEventListener("online", () => phResync(true));
 }
 function openSyncBig(){
   if($("syncBox").hidden) return;
@@ -2659,8 +2774,17 @@ function groupMsg(m, conn){
   if(!m || typeof m !== "object" || !m.t || !gOn()) return;
   if(m.mid){ if(seenMids.includes(m.mid)) return; seenMids.push(m.mid); if(seenMids.length > 300) seenMids.shift(); }
   if(m.t === "getCollage"){ if(conn) sendCollage(conn, m.night); return; }
+  if(m.t === "getAlbum"){ if(conn) sendAlbum(conn, m.night, m.since || 0); return; }
+  if(m.t === "getPhoto"){ if(conn) sendFullPhoto(conn, m.id); return; }
+  const fromId = clean(m.from, 40);
+  if(m.t === "ping"){   // just "still here": don't create anyone
+    const pp = people[fromId];
+    if(pp){ pp.lastSeen = Date.now(); if(conn){ pp.online = true; pp.via = "peer"; } else if(!Array.from(connPerson.values()).includes(pp.id)) pp.via = "relay"; }
+    if(conn && pp) oneConnPerPhone(conn, pp.id);
+    return;
+  }
   const p = upsertPerson(m, conn ? "peer" : "relay"); if(!p) return;
-  if(conn) connPerson.set(conn, p.id);
+  if(conn) oneConnPerPhone(conn, p.id);
   let changed = true;
   switch(m.t){
     case "hello": {
@@ -2694,6 +2818,12 @@ function setAway(p, away){
     p.away = false;
     if(p.jailed){ p.jailed = false; gToast(`🔓 ${p.emoji} ${escH(p.name)} is out of phone jail`); }
   }
+}
+// a phone that reconnects gets a new connection; close its old ones so it's only counted once
+function oneConnPerPhone(conn, id){
+  for(const [oc, pid] of Array.from(connPerson)) if(pid === id && oc !== conn){ connPerson.delete(oc); conns.delete(oc); connAlive.delete(oc); try{ oc.close(); }catch(e){} }
+  connPerson.set(conn, id);
+  renderSyncBox();
 }
 function groupConnClosed(c){
   const id = connPerson.get(c); connPerson.delete(c);
@@ -2736,7 +2866,7 @@ function groupState(){
   const ppl = Object.values(people).map(p => ({id:p.id, n:p.name, e:p.emoji, g:p.goal, d:p.goalDone, j:p.jailed, v:p.jailVisits,
     m:Math.floor(p.focusMs/60000), s:p.sessions, gd:p.goalsDone}));
   return {f:{goals:S.gGoals, jail:S.gJail, stats:S.gStats, photos:S.gPhotos}, grace:S.jailGrace, room:roomName(),
-    night: night ? {id:night.id, m:Math.floor(night.focusMs/60000), s:night.sessions, gd:night.goalsDone} : null,
+    night: night ? {id:night.id, m:Math.floor(night.focusMs/60000), s:night.sessions, gd:night.goalsDone, p:night.photos} : null,
     ppl, recap: lastRecap};
 }
 // the relay only carries small messages, so trim the crew list (and recap) to fit
@@ -2791,13 +2921,26 @@ function renderCrew(){
     return;
   }
   list.sort((a,b) => (isOnline(b) - isOnline(a)) || (b.focusMs - a.focusMs) || a.name.localeCompare(b.name));
+  const here = list.filter(isOnline).length;
+  $("crewCard").querySelector("h2").textContent = `👥 The crew · ${here} here`;
   $("crewList").innerHTML = list.map(p => {
     const goal = !S.gGoals ? "" : p.goal ? `<div class="gl ${p.goalDone ? "done" : ""}">${p.goalDone ? "✅ " : "🎯 "}${escH(p.goal)}</div>` : `<div class="gl">no goal yet</div>`;
     const stat = S.gStats ? `<span class="mn">${minsTxt(p.focusMs)}${p.goalsDone ? ` · ✅${p.goalsDone}` : ""}</span>` : `<span class="mn">${p.goalsDone && S.gGoals ? "✅" + p.goalsDone : ""}</span>`;
     const down = S.gJail && p.down && !p.away ? ` <span title="Phone face down">🙃</span>` : "";
     return `<div class="crew-row ${isOnline(p) ? "" : "off"}"><span class="em">${p.jailed ? "📵" : p.emoji}</span><div style="min-width:0"><div class="nm">${escH(p.name)}${down}</div>${goal}</div>${stat}</div>`;
   }).join("");
+  fitCrew();
 }
+// Try roomier layouts first, then denser ones, until the whole crew fits in the card.
+function fitCrew(){
+  const el = $("crewList");
+  if(!el || el.offsetParent === null) return;
+  for(const lvl of ["", "d1", "d2", "d3", "d4"]){
+    el.className = "crew-list " + lvl;
+    if(el.scrollHeight <= el.clientHeight + 2 && el.scrollWidth <= el.clientWidth + 2) return;
+  }
+}
+addEventListener("resize", () => { if(typeof fitCrew === "function") fitCrew(); });
 (function crewAutoScroll(){
   let dir = 1, pauseUntil = 0;
   setInterval(() => {
@@ -2836,10 +2979,12 @@ async function savePhoto(p, m){
   if(night.photos >= 400) return;
   const blob = await (await fetch(m.data)).blob();
   const id = clean(m.pid, 40) || newCode();
-  try{ await idbDo("readwrite", st => st.put({id, night:night.id, from:p.id, name:p.name, ts:Date.now(), blob}), "photos"); }catch(e){ return; }
+  const thumb = await makeThumb(blob);
+  try{ await idbDo("readwrite", st => st.put({id, night:night.id, from:p.id, name:p.name, emoji:p.emoji, ts:Date.now(), blob, thumb}), "photos"); }catch(e){ return; }
   night.photos++; delete collageCache[night.id];
   night.last = Date.now(); saveNight(); renderCrew(); syncSoon();
   gToast(`📸 ${p.emoji} ${escH(p.name)} added a photo`, m.data);
+  if(!$("album").hidden && albumMode === "projector") albumOpen("projector");
 }
 async function nightPhotos(nightId){
   try{ return (await idbDo("readonly", st => st.index("night").getAll(nightId), "photos")) || []; }catch(e){ return []; }
@@ -3040,6 +3185,10 @@ function phGroupRender(g){
   phDownSetup(g.f.jail);
   // photos
   $("phPhotoBox").hidden = !g.f.photos;
+  const pc = (g.night && g.night.p) || (g.recap && g.recap.photos) || 0;
+  $("phAlbumBtn").textContent = pc ? `📸 See the album (${pc})` : "📸 See the album";
+  // album open and new photos arrived: fetch just the new ones
+  if(!$("album").hidden && albumMode === "phone" && pc > albumItems.length && Date.now() - phAlbumAsked > 3000) albumOpen("phone");
   // recap
   phShowRecap(g.recap);
 }
@@ -3117,6 +3266,7 @@ async function phSendPhotos(files){
   msg(sent ? `📸 Added ${sent} photo${sent === 1 ? "" : "s"} (${phPhotoN} from you tonight).` : "Couldn't read those photos.");
 }
 function phMsg(d){   // non-state messages from the projector
+  if(phAlbumMsg(d)) return;
   if(d && d.t === "collage" && d.night){
     phCollage[d.night] = d.data;
     if(phG && phG.recap && phG.recap.id === d.night && phRecapSeen !== d.night) phShowRecap(phG.recap);
@@ -3202,6 +3352,109 @@ if(SYNC){
   };
   $("phDown").onclick = () => phSetDown(false);   // a tap brings the page back too
 }
+
+/* ================= album: browse photos on the projector and on phones ================= */
+var albumMode = null, albumItems = [], albumNight = null, phAlbumAsked = 0, phAlbumFull = {};
+async function makeThumb(blob){
+  try{
+    const im = await createImageBitmap(blob), sc = Math.min(1, 360 / Math.max(im.width, im.height)), cv = document.createElement("canvas");
+    cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
+    cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/jpeg", .7);
+  }catch(e){ return ""; }
+}
+async function albumPhotos(nightId){
+  const list = (await nightPhotos(nightId)).sort((a,b) => b.ts - a.ts);
+  for(const ph of list) if(!ph.thumb){ ph.thumb = await makeThumb(ph.blob); idbDo("readwrite", st => st.put(ph), "photos").catch(() => {}); }
+  return list;
+}
+const blobToData = b => new Promise(r => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); });
+// projector → phone: thumbnails in small batches, then full photos on request
+async function sendAlbum(conn, nightId, since){
+  const id = nightId || (night && night.id) || (lastRecap && lastRecap.id);
+  if(!id) return;
+  const list = (await albumPhotos(id)).filter(ph => ph.ts > since);
+  if(!list.length){ try{ conn.send({t:"album", night:id, items:[], done:true}); }catch(e){} return; }
+  for(let i = 0; i < list.length; i += 12){
+    const items = list.slice(i, i + 12).map(ph => ({id:ph.id, name:ph.name, emoji:ph.emoji || "", ts:ph.ts, thumb:ph.thumb}));
+    try{ conn.send({t:"album", night:id, items, done:i + 12 >= list.length}); }catch(e){ return; }
+    await sleep(120);
+  }
+}
+async function sendFullPhoto(conn, photoId){
+  try{
+    const ph = await idbDo("readonly", st => st.get(String(photoId)), "photos");
+    if(ph) conn.send({t:"photoFull", id:ph.id, data:await blobToData(ph.blob)});
+  }catch(e){}
+}
+function albumRender(){
+  $("albumCount").textContent = albumItems.length ? `${albumItems.length} photo${albumItems.length === 1 ? "" : "s"}` : "";
+  $("albumGrid").innerHTML = albumItems.map(ph => `<button data-ph="${escH(ph.id)}"><img src="${ph.thumb}" alt="" loading="lazy"><span>${escH(ph.emoji || "")} ${escH(ph.name || "")}</span></button>`).join("");
+}
+async function albumOpen(mode){
+  albumMode = mode;
+  $("album").hidden = false; $("albumView").hidden = true;
+  $("albumZip").hidden = mode !== "projector";
+  if(mode === "projector"){
+    const r = night ? summarize(night) : lastRecap;
+    albumNight = r ? r.id : null;
+    albumItems = albumNight ? (await albumPhotos(albumNight)).map(ph => ({id:ph.id, name:ph.name, emoji:ph.emoji, ts:ph.ts, thumb:ph.thumb})) : [];
+    $("albumMsg").textContent = albumItems.length ? "" : "No photos yet. Phones can add them, or press 📸 Group photo.";
+    albumRender();
+  } else {
+    const g = phG || {};
+    const nid = (g.night && g.night.id) || (g.recap && g.recap.id);
+    if(!(phConn && phConn.open)){ albumItems = albumItems.filter(x => x.night === nid); albumRender(); $("albumMsg").textContent = "The album needs a direct connection to the big screen (same Wi-Fi works best)."; return; }
+    if(albumNight !== nid){ albumItems = []; albumNight = nid; }
+    $("albumMsg").textContent = albumItems.length ? "" : "Loading photos…";
+    albumRender();
+    const since = albumItems.reduce((a, x) => Math.max(a, x.ts), 0);
+    phAlbumAsked = Date.now();
+    phSend({t:"getAlbum", night:nid, since}, false);
+  }
+}
+function albumClose(){ $("album").hidden = true; $("albumView").hidden = true; }
+async function albumShow(id){
+  const ph = albumItems.find(x => x.id === id); if(!ph) return;
+  $("albumView").hidden = false;
+  $("albumImg").src = ph.thumb;
+  $("albumCap").textContent = `${ph.emoji || ""} ${ph.name || ""} · ${new Date(ph.ts).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}`;
+  $("albumSave").removeAttribute("href");
+  $("albumSave").textContent = "Loading…";
+  $("albumSave").download = `Focus Jams - ${(ph.name || "photo").replace(/[^\w\- ]+/g, "")}.jpg`;
+  const setFull = url => { if($("albumView").hidden) return; $("albumImg").src = url; $("albumSave").href = url; $("albumSave").textContent = "⬇ Save photo"; };
+  if(albumMode === "projector"){
+    const rec = await idbDo("readonly", st => st.get(id), "photos").catch(() => null);
+    if(rec) setFull(URL.createObjectURL(rec.blob));
+  } else if(phAlbumFull[id]) setFull(phAlbumFull[id]);
+  else { phAlbumFull.want = id; phSend({t:"getPhoto", id}, false); }
+}
+// phone: answers from the projector
+function phAlbumMsg(d){
+  if(d.t === "album"){
+    if(d.night !== albumNight) { albumNight = d.night; albumItems = []; }
+    for(const it of d.items || []) if(!albumItems.some(x => x.id === it.id)) albumItems.push(Object.assign({night:d.night}, it));
+    albumItems.sort((a,b) => b.ts - a.ts);
+    if(!$("album").hidden){ albumRender(); $("albumMsg").textContent = albumItems.length ? "" : "No photos yet. Be the first! 📷"; }
+    return true;
+  }
+  if(d.t === "photoFull"){
+    phAlbumFull[d.id] = d.data;
+    if(phAlbumFull.want === d.id && !$("albumView").hidden){ $("albumImg").src = d.data; $("albumSave").href = d.data; $("albumSave").textContent = "⬇ Save photo"; }
+    return true;
+  }
+  return false;
+}
+$("albumClose").onclick = albumClose;
+$("albumBack").onclick = () => { $("albumView").hidden = true; };
+$("albumGrid").onclick = e => { const b = e.target.closest("[data-ph]"); if(b) albumShow(b.dataset.ph); };
+$("albumZip").onclick = () => { const r = night ? summarize(night) : lastRecap; if(r) downloadAlbum(r); };
+$("albumBtn").onclick = () => albumOpen("projector");
+document.addEventListener("keydown", e => {
+  if($("album").hidden) return;
+  if(e.key === "Escape"){ e.preventDefault(); if(!$("albumView").hidden) $("albumView").hidden = true; else albumClose(); }
+}, true);
+if(SYNC) $("phAlbumBtn").onclick = () => albumOpen("phone");
 
 /* ================= camera: phones and the projector's photo booth ================= */
 var camStream = null, camFacing = "user", camTimer = 0, camMode = null, camShotData = null, camBusy = false, camAutoKeep = null;
