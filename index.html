@@ -460,6 +460,7 @@
       <button data-p="dlgLook" class="on">🎨 Look</button>
       <button data-p="dlgTimer">⏱ Timer &amp; sounds</button>
       <button data-p="dlgMusic">🎵 Music</button>
+      <button data-p="dlgBackup">💾 Backup</button>
     </div>
 
     <div id="dlgTimer" class="dpane" hidden>
@@ -559,7 +560,26 @@
         <label><input type="checkbox" id="s-sync"> Timer plays &amp; pauses the built-in player</label>
         <label><input type="checkbox" id="s-appsync"> Timer controls my Spotify app (connect on the <b>My Spotify / Jam</b> tab)</label>
       </div>
+      <h3>Smooth transitions</h3>
+      <div class="toggles" style="margin-top:0">
+        <label><input type="checkbox" id="s-fadeMusic"> Fade the music out before a session ends and back in when the next one starts</label>
+      </div>
+      <div class="sounds">
+        <label>Fade length<select id="s-fadeSecs"><option value="2">2 seconds</option><option value="4">4 seconds</option><option value="6">6 seconds</option><option value="10">10 seconds</option></select></label>
+      </div>
+      <p class="hint" id="fadeNote">Works when the timer controls your Spotify app (My Spotify / Jam). Spotify's built-in player doesn't let websites change its volume, so it still stops and starts instantly. A few devices (some speakers and TVs) don't allow volume changes either.</p>
       <p class="hint">With your Spotify app connected and playlist switching on, the timer starts the focus or break playlist on whatever device is playing. In a Jam, that changes the music for everyone listening.</p>
+    </div>
+
+    <div id="dlgBackup" class="dpane" hidden>
+      <h3>Back up your setup</h3>
+      <p class="sub" style="margin-bottom:10px">Save everything to one file: colors, background (including an uploaded picture), timer and sound settings, your custom sounds with their lengths, playlists, visualizer settings and Jam link. Load it on another computer or browser to get the same setup.</p>
+      <div class="testrow" style="margin-top:0">
+        <button class="big sm" id="bkExport">⬇ Download backup</button>
+        <label class="ghost sm">⬆ Load a backup<input type="file" id="bkImport" accept=".json,application/json" hidden></label>
+      </div>
+      <p class="hint" id="bkMsg"></p>
+      <p class="hint">Not included: your Spotify sign-in (just click Connect on the new computer) and the phone sync code (each computer gets its own QR code, so two screens never clash). Loading a backup replaces this browser's current setup.</p>
     </div>
 
     <div id="dlgLook" class="dpane">
@@ -675,6 +695,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
              viz:true, vizLevel:"party", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
              vizStopAtEnd:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
+             fadeMusic:true, fadeSecs:4,
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -867,6 +888,7 @@ function stopTick(){ clearInterval(timer); timer = null; }
 function tick(){
   remaining = Math.max(0,(endAt-Date.now())/1000);
   if(remaining <= 0) return finish();
+  maybePreFade();
   renderTime();
 }
 function next(fromFinish){
@@ -1276,6 +1298,7 @@ function renderNP(d){
   $("npArtist").textContent = artist;
   $("npPlay").textContent = d.is_playing ? "❚❚" : "▶";
   np = {playing:d.is_playing, prog:d.progress_ms || 0, at:Date.now(), dur:it.duration_ms || 0, has:true};
+  appObserve(d);
   curTrack = {uri:it.uri, name:it.name, artist, art:art ? art.url : ""}; updateLyrBtns();
   renderMini(d.is_playing ? `♪ ${it.name} — ${artist}` : null);
   updateProgress();
@@ -1293,19 +1316,89 @@ async function appCmd(method, path, body){
   try{ await api(method, path, body); setTimeout(poll, 600); }
   catch(e){ setAppMsg(errText(e)); }
 }
+/* ----- Spotify app control, with optional volume fades -----
+   Commands run one after another (a queue). Decisions use what we've already *asked* Spotify to do
+   (expected playing state and volume), not the last poll, which can be a few seconds stale. */
+var appVol = null, appCanVol = true, appPending = 0, appChain = Promise.resolve();
+var appExpect = null, volExpect = null, preFaded = false;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function appEnqueue(fn){
+  appPending++;
+  appChain = appChain.then(fn).catch(e => setAppMsg(errText(e))).then(() => { appPending--; setTimeout(poll, 600); });
+}
+const canFade = () => S.fadeMusic && appCanVol && appVol != null;
+const setVol = v => api("PUT", "/me/player/volume?volume_percent=" + Math.max(0, Math.min(100, Math.round(v))));
+async function fadeVol(from, to, secs){
+  const n = Math.max(4, Math.min(12, Math.round(secs*2.5)));
+  try{
+    for(let i = 1; i <= n; i++){ await setVol(from + (to - from)*i/n); await sleep(secs*1000/n); }
+  }catch(e){ if(e && e.status === 403) appCanVol = false; }   // this device won't allow volume changes
+}
+// keep our expectations in line with reality whenever nothing is queued (e.g. someone used the Spotify app directly)
+function appObserve(d){
+  if(appPending) return;
+  appExpect = !!(d && d.is_playing);
+  if(d && d.device){
+    appCanVol = d.device.supports_volume !== false;
+    if(typeof d.device.volume_percent === "number"){
+      volExpect = d.device.volume_percent;
+      if(d.device.volume_percent > 0 && !preFaded) appVol = d.device.volume_percent;
+    }
+  }
+}
+function appTransition(kind, body){
+  const fade = canFade(), secs = S.fadeSecs, target = appVol;
+  if(appExpect === null) appExpect = np.playing;
+  const wasPlaying = appExpect, startVol = volExpect ?? target;
+  if(kind === "pause"){
+    appExpect = false; volExpect = fade ? target : volExpect; preFaded = false;
+    appEnqueue(async () => {
+      if(fade && wasPlaying && startVol > 0) await fadeVol(startVol, 0, secs);
+      await api("PUT", "/me/player/pause");
+      if(fade) await setVol(target).catch(() => {});   // back to normal, ready for next time
+    });
+  } else {
+    appExpect = true; volExpect = fade ? target : volExpect; preFaded = false;
+    appEnqueue(async () => {
+      if(fade && body && wasPlaying && startVol > 0) await fadeVol(startVol, 0, secs);   // switching playlists: fade out first
+      if(fade && !(body && wasPlaying)) await setVol(0).catch(() => {});
+      await api("PUT", "/me/player/play", body);
+      if(fade) await fadeVol(0, target, secs);
+    });
+  }
+}
+// Start fading out a few seconds early, so the music is gone right as the session ends.
+function maybePreFade(){
+  if(preFaded || !canFade() || S.src !== "app" || !S.appsync || !auth) return;
+  if(!(appExpect ?? np.playing) || remaining > S.fadeSecs) return;
+  const endChangesMusic = S.breakPlaylist || (mode === "focus" && !S.breakmusic);
+  if(!endChangesMusic) return;
+  preFaded = true;
+  const from = volExpect ?? appVol, end = endAt;
+  volExpect = 0;
+  // aim for the real end time, even if this waits behind another fade in the queue
+  appEnqueue(() => fadeVol(from, 0, Math.max(.5, (end - Date.now())/1000 - .3)));
+}
+// paused/reset during an early fade while the music keeps playing: bring the volume back
+function undoPreFade(){
+  if(!preFaded) return;
+  preFaded = false;
+  if(appVol != null && appExpect && volExpect === 0){ volExpect = appVol; const v = appVol; appEnqueue(() => setVol(v)); }
+}
 function syncApp(){
   if(S.src !== "app" || !S.appsync || !auth) return;
   const want = wantMusic();
+  if(appExpect === null && np.has) appExpect = np.playing;
   if(want && S.breakPlaylist && appUri !== desiredUri()){
     appUri = desiredUri(); appIntent = true;
-    appCmd("PUT", "/me/player/play", {context_uri: appUri});
+    appTransition("play", {context_uri: appUri});
     return;
   }
   if(appIntent === null && !want) return;   // never pause music you were already listening to before starting
   if(want === appIntent) return;
   appIntent = want;
-  if(want === np.playing && np.has) return;
-  appCmd("PUT", want ? "/me/player/play" : "/me/player/pause");
+  if(want === appExpect && np.has){ undoPreFade(); return; }
+  appTransition(want ? "play" : "pause");
 }
 function renderApp(){
   const connected = !!auth;
@@ -1349,7 +1442,7 @@ async function handleRedirect(){
 
 /* ================= wiring ================= */
 $("go").onclick = () => running ? pause() : start();
-$("reset").onclick = () => { cancelSound(); stopTick(); running = false; remaining = total(mode); render(); syncMusic(); };
+$("reset").onclick = () => { cancelSound(); stopTick(); running = false; remaining = total(mode); render(); syncMusic(); undoPreFade(); };
 $("skip").onclick = () => { const wasRunning = running, was = mode; setMode(next(false)); if(wasRunning && S.auto) start(); if(was !== "focus") breakEnded(); };
 document.querySelectorAll(".tab").forEach(t => t.onclick = () => setMode(t.dataset.m));
 $("chips").onclick = e => { const b = e.target.closest(".chip"); if(b) setPlaylist(chipKind(), b.dataset.uri); };
@@ -2168,6 +2261,9 @@ function renderVizUI(){
 $("s-viz").onchange = e => { S.viz = e.target.checked; save(); vizUpdate(); };
 $("s-vizLevel").onchange = e => { S.vizLevel = e.target.value; save(); };
 $("s-vizStopAtEnd").onchange = e => { S.vizStopAtEnd = e.target.checked; save(); };
+$("s-fadeMusic").checked = S.fadeMusic; $("s-fadeSecs").value = String(S.fadeSecs);
+$("s-fadeMusic").onchange = e => { S.fadeMusic = e.target.checked; save(); if(!S.fadeMusic) undoPreFade(); };
+$("s-fadeSecs").onchange = e => { S.fadeSecs = +e.target.value; save(); };
 $("endMsgBox").onclick = hideEndMsg;
 function renderEndMsgUI(){ $("s-endMsgOn").checked = S.endMsgOn; $("s-endMsg").value = S.endMsg; $("s-endMsgSecs").value = String(S.endMsgSecs); }
 $("s-endMsgOn").onchange = e => { S.endMsgOn = e.target.checked; save(); syncSoon(); };
@@ -2202,6 +2298,62 @@ $("vizSys").onclick = async () => { unlockAudio(); vizStopSystem(); vizDetach();
 $("vizConnect").onclick = async () => { unlockAudio(); await vizStartSystem(); renderVizUI(); };
 $("vizPrev").onclick = () => { vizTogglePreview(); renderVizUI(); $("look").close(); };
 renderVizUI();
+
+/* ================= backup: export / import ================= */
+const BACKUP_SKIP = ["syncCode"];   // per-computer; Spotify sign-in lives elsewhere and is never exported
+const blobToDataUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+const dataUrlToBlob = async u => (await fetch(u)).blob();
+async function exportBackup(){
+  const msg = t => $("bkMsg").textContent = t;
+  msg("Preparing…");
+  try{
+    const settings = Object.assign({}, S); BACKUP_SKIP.forEach(k => delete settings[k]);
+    const sounds = [];
+    for(const c of Object.values(customSounds)) sounds.push({id:c.id, name:c.name, start:c.start || 0, len:c.len || CUSTOM_DEFAULT_SECS, data:await blobToDataUrl(c.blob)});
+    const data = {app:"focus-jams", version:1, exported:new Date().toISOString(), settings, backgroundImage:uploadedImg || null, sounds};
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data)], {type:"application/json"}));
+    const a = document.createElement("a");
+    a.href = url; a.download = `focus-jams-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    msg(`Downloaded. Includes ${sounds.length} custom sound${sounds.length === 1 ? "" : "s"}${uploadedImg ? " and your background picture" : ""}.`);
+  }catch(e){ msg("Couldn't make the backup: " + (e && e.message || e)); }
+}
+async function importBackup(file){
+  const msg = t => $("bkMsg").textContent = t;
+  if(!file) return;
+  let data;
+  try{ data = JSON.parse(await file.text()); }catch(e){ msg("That file isn't a Focus Jams backup."); return; }
+  if(!data || data.app !== "focus-jams" || !data.settings || typeof data.settings !== "object"){ msg("That file isn't a Focus Jams backup."); return; }
+  if(!confirmImport()) return;
+  msg("Loading…");
+  try{
+    // settings: only keys this version knows about, with the right types; keep this computer's own sync code
+    const next = Object.assign({}, DEF, {syncCode:S.syncCode});
+    for(const [k, v] of Object.entries(data.settings)){
+      if(BACKUP_SKIP.includes(k) || !(k in DEF)) continue;
+      const d = DEF[k];
+      if(d === null || typeof v === typeof d || (k === "customNames" && v && typeof v === "object")) next[k] = v;
+    }
+    // custom sounds: replace this browser's set with the backup's
+    for(const id of Object.keys(customSounds)){ try{ await idbDo("readwrite", st => st.delete(id)); }catch(e){} }
+    for(const sd of (Array.isArray(data.sounds) ? data.sounds : [])){
+      if(!sd || typeof sd.data !== "string" || !sd.data.startsWith("data:")) continue;
+      const blob = await dataUrlToBlob(sd.data);
+      await idbDo("readwrite", st => st.put({id:String(sd.id), name:String(sd.name || "My sound").slice(0, 60), blob, start:+sd.start || 0, len:+sd.len || CUSTOM_DEFAULT_SECS}));
+    }
+    // background picture
+    if(typeof data.backgroundImage === "string" && data.backgroundImage.startsWith("data:image/")) store.set("fj-img", data.backgroundImage);
+    else store.set("fj-img", null);
+    store.set("fj-settings", next);
+    msg("Loaded! Reloading to apply…");
+    setTimeout(() => location.reload(), 700);
+  }catch(e){ msg("Couldn't load everything from that backup: " + (e && e.message || e)); }
+}
+// The page's custom dialogs are used everywhere else; a simple confirm is fine for this rare, destructive step.
+function confirmImport(){ return window.FJ_AUTO_CONFIRM || confirm("Replace this browser's Focus Jams setup with the backup? (Your Spotify sign-in stays.)"); }
+$("bkExport").onclick = exportBackup;
+$("bkImport").onchange = e => { importBackup(e.target.files[0]); e.target.value = ""; };
 
 /* ================= start up ================= */
 (async function init(){
