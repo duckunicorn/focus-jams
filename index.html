@@ -27,6 +27,9 @@
   body.viz .ringbox{transition:transform .08s linear}
   .vizbadge{display:none;z-index:5;position:fixed;left:50%;bottom:2.4vh;transform:translateX(-50%);font:700 clamp(14px,1.3vw,24px) "Space Grotesk",system-ui,sans-serif;letter-spacing:.3em;text-transform:uppercase;color:#fff;text-shadow:0 0 18px var(--accent),0 0 4px #000;pointer-events:none}
   body.viz.vizprev .vizbadge{display:block}
+  .vizconnect{display:none;position:fixed;left:0;right:0;bottom:16vh;margin:0 auto;width:max-content;max-width:90vw;z-index:6;box-shadow:0 10px 40px -8px var(--accent),0 0 0 4px rgba(0,0,0,.35) !important;font-size:clamp(15px,1.3vw,24px) !important;padding:.9em 1.4em !important}
+  body.viz.needsound .vizconnect{display:block}
+  body.viz.needsound.idle .vizconnect{display:block;opacity:1;cursor:pointer}
   #dim{z-index:-1;background:#000;pointer-events:none}
   #bg.drift{background-size:400% 400% !important;animation:drift 28s ease infinite}
   @keyframes drift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
@@ -240,7 +243,7 @@
 </style>
 </head>
 <body>
-<div id="bg"></div><div id="dim"></div><canvas id="viz"></canvas><div class="vizbadge" id="vizBadge">☕ Break time</div>
+<div id="bg"></div><div id="dim"></div><canvas id="viz"></canvas><div class="vizbadge" id="vizBadge">☕ Break time</div><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button>
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
@@ -494,16 +497,21 @@
       </div>
       <div class="sounds">
         <label>Intensity<select id="s-vizLevel"><option value="chill">Chill</option><option value="party">Party</option><option value="rave">Rave</option></select></label>
-        <label>React to<select id="s-vizSrc"><option value="mic">The music (microphone)</option><option value="beat">A steady beat (tap T)</option></select></label>
+        <label>React to<select id="s-vizSrc"><option value="system">The computer's sound (best)</option><option value="mic">A microphone or input</option><option value="beat">A steady beat (tap T)</option></select></label>
+      </div>
+      <div class="sounds" id="vizDevRow" hidden>
+        <label style="grid-column:1 / -1">Microphone or input<select id="s-vizDev"><option value="">Default microphone</option></select></label>
       </div>
       <div class="toggles">
         <label><input type="checkbox" id="s-vizStrobe"> Strobe flashes (don't use if anyone is sensitive to flashing lights)</label>
       </div>
       <div class="testrow">
         <button class="ghost sm" id="vizMic">🎤 Allow microphone</button>
+        <button class="ghost sm" id="vizSys">🔊 Connect computer sound</button>
         <button class="ghost sm" id="vizPrev">▶ Preview (V)</button>
       </div>
-      <p class="hint" id="vizMsg">The page can't hear Spotify directly, so it listens to the speakers through the projector computer's microphone. No audio is recorded or sent anywhere.</p>
+      <p class="hint" id="vizMsg"></p>
+      <p class="hint" id="vizHow"></p>
 
       <h3>Music during the timer</h3>
       <div class="toggles" style="margin-top:0">
@@ -625,7 +633,7 @@ const MODE_IDX = {focus:0, short:1, long:2};
 const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              focusSound:"chime", breakSound:"bell", volume:70, repeat:1, jamLink:"",
              clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
-             viz:true, vizLevel:"party", vizSrc:"mic", vizStrobe:false, vizBpm:124,
+             viz:true, vizLevel:"party", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"",
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -1681,26 +1689,76 @@ function vizResize(){
 }
 addEventListener("resize", () => { if(vizOn) vizResize(); });
 
-async function vizStartMic(fromClick){
-  if(vizMicStream || S.vizSrc !== "mic") return !!vizMicStream;
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ vizMicFailed = true; vizMsg("This browser can't use the microphone here, so the visualizer follows a steady beat."); return false; }
+// One analyser, fed by whichever source is connected: the computer's own sound (via the browser's
+// screen-share picker with "share system audio"), a microphone/input, or nothing (synthetic beat).
+var vizSysStream = null, vizSrcNode = null;
+function vizAttach(stream){
+  unlockAudio();
+  if(vizSrcNode) try{ vizSrcNode.disconnect(); }catch(e){}
+  vizSrcNode = actx.createMediaStreamSource(stream);
+  vizAnalyser = actx.createAnalyser(); vizAnalyser.fftSize = 1024; vizAnalyser.smoothingTimeConstant = .75;
+  vizSrcNode.connect(vizAnalyser);   // not connected to the speakers, so no echo
+  vizFreq = new Uint8Array(vizAnalyser.frequencyBinCount); vizWave = new Uint8Array(vizAnalyser.fftSize);
+  vizMicFailed = false;
+}
+function vizDetach(){ if(vizSrcNode) try{ vizSrcNode.disconnect(); }catch(e){} vizSrcNode = null; vizAnalyser = null; }
+const NO_VOICE_FX = {echoCancellation:false, noiseSuppression:false, autoGainControl:false};
+
+async function vizStartSystem(){
+  if(vizSysStream) return true;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){ vizMsg("This browser can't share the computer's sound. Use Chrome or Edge, or pick a microphone instead."); return false; }
   try{
-    // switch off voice processing, which would otherwise try to filter the music out
-    vizMicStream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false, noiseSuppression:false, autoGainControl:false}});
-    unlockAudio();
-    const src = actx.createMediaStreamSource(vizMicStream);
-    vizAnalyser = actx.createAnalyser(); vizAnalyser.fftSize = 1024; vizAnalyser.smoothingTimeConstant = .75;
-    src.connect(vizAnalyser);   // not connected to the speakers, so there's no feedback
-    vizFreq = new Uint8Array(vizAnalyser.frequencyBinCount); vizWave = new Uint8Array(vizAnalyser.fftSize);
-    vizMicFailed = false; vizMsg("🎤 Listening to the music. Visuals react to what the microphone hears.");
-    return true;
+    // the browser shows its own picker; a tiny, slow video track is required but unused
+    const st = await navigator.mediaDevices.getDisplayMedia({
+      video:{width:{max:320}, height:{max:180}, frameRate:{max:1}},
+      audio:NO_VOICE_FX, systemAudio:"include", selfBrowserSurface:"include", surfaceSwitching:"exclude"});
+    if(!st.getAudioTracks().length){
+      st.getTracks().forEach(t => t.stop());
+      vizMsg("No sound was shared. Try again: choose “Entire screen” and turn on “Also share system audio” (or pick this tab and turn on “Also share tab audio”).");
+      return false;
+    }
+    vizSysStream = st;
+    st.getAudioTracks()[0].addEventListener("ended", () => {   // "Stop sharing" was clicked
+      st.getTracks().forEach(t => t.stop());
+      if(vizSysStream === st){ vizSysStream = null; vizDetach(); vizMsg("Stopped sharing the computer's sound. Click “Connect computer sound” to reconnect."); vizUpdate(); }
+    });
+    st.getVideoTracks().forEach(t => t.addEventListener("ended", () => {}));
+    if(S.vizSrc === "system") vizAttach(st);
+    vizMsg("🔊 Connected to the computer's sound. The visuals follow exactly what's playing.");
+    vizUpdate(); return true;
   }catch(e){
-    vizMicFailed = true;
-    vizMsg(fromClick ? "Microphone blocked. Allow it in the browser's address bar (🔒 icon), or the visualizer will follow a steady beat." : "No microphone access yet, so the visualizer follows a steady beat. Click “Allow microphone” in Customize → Music.");
+    vizMsg("Sharing was cancelled. Click “Connect computer sound” to try again.");
     return false;
   }
 }
-function vizStopMic(){ if(vizMicStream){ vizMicStream.getTracks().forEach(t => t.stop()); vizMicStream = null; vizAnalyser = null; } }
+function vizStopSystem(){ if(vizSysStream){ vizSysStream.getTracks().forEach(t => t.stop()); vizSysStream = null; } }
+
+async function vizStartMic(fromClick){
+  if(S.vizSrc !== "mic") return false;
+  if(vizMicStream) return true;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ vizMicFailed = true; vizMsg("This browser can't use a microphone here, so the visualizer follows a steady beat."); return false; }
+  try{
+    const audio = Object.assign({}, NO_VOICE_FX, S.vizDev ? {deviceId:{exact:S.vizDev}} : {});
+    vizMicStream = await navigator.mediaDevices.getUserMedia({audio});
+    vizAttach(vizMicStream);
+    vizMsg("🎤 Listening through the microphone.");
+    vizListDevices();
+    return true;
+  }catch(e){
+    vizMicFailed = true;
+    if(S.vizDev && e && e.name === "OverconstrainedError"){ S.vizDev = ""; save(); return vizStartMic(fromClick); }   // that input was unplugged
+    vizMsg(fromClick ? "Microphone blocked. Allow it from the 🔒 icon in the address bar, or the visualizer follows a steady beat." : "No microphone access yet, so the visualizer follows a steady beat. Click “Allow microphone” in Customize → Music.");
+    return false;
+  }
+}
+function vizStopMic(){ if(vizMicStream){ vizMicStream.getTracks().forEach(t => t.stop()); vizMicStream = null; if(S.vizSrc !== "system") vizDetach(); } }
+async function vizListDevices(){
+  try{
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput" && d.deviceId !== "default" && d.deviceId !== "communications");
+    $("s-vizDev").innerHTML = `<option value="">Default microphone</option>` + devs.map((d,i) => `<option value="${d.deviceId}">${(d.label || "Input " + (i+1)).replace(/</g,"&lt;")}</option>`).join("");
+    $("s-vizDev").value = devs.some(d => d.deviceId === S.vizDev) ? S.vizDev : "";
+  }catch(e){}
+}
 function vizMsg(t){ $("vizMsg").textContent = t; }
 
 // tap tempo: press T in time with the music
@@ -1723,6 +1781,8 @@ function vizUpdate(){
   document.body.classList.toggle("viz", want);
   document.body.classList.toggle("vizprev", want && vizPreview && !(isBreak() && running));
   $("vizBadge").textContent = vizPreview && !(isBreak() && running) ? "Visualizer preview · press V to stop" : "☕ " + LABELS[mode];
+  document.body.classList.toggle("needsound", want && S.vizSrc === "system" && !vizSysStream);
+  if(want && S.vizSrc === "system" && vizSysStream && !vizAnalyser) vizAttach(vizSysStream);
   if(want && !vizOn){
     vizOn = true; vizResize(); vizParts = [];
     if(S.vizSrc === "mic") vizStartMic(false);
@@ -1731,7 +1791,7 @@ function vizUpdate(){
     vizOn = false; cancelAnimationFrame(vizRaf);
     vizCtx && vizCtx.clearRect(0, 0, vizW, vizH);
     $$ringReset();
-    vizStopMic();   // don't keep the microphone open while you work
+    vizStopMic();   // don't keep a microphone open while you work (the shared computer sound stays connected)
   }
 }
 function $$ringReset(){ const rb = document.querySelector(".wrap .ringbox"); if(rb) rb.style.transform = ""; }
@@ -1741,7 +1801,7 @@ function vizTogglePreview(){ vizPreview = !vizPreview; vizUpdate(); }
 function vizAudio(now){
   const N = 64, bands = new Array(N).fill(0);
   let bass = 0, mid = 0, high = 0, beat = false;
-  if(vizAnalyser && !vizMicFailed){
+  if(vizAnalyser && !vizMicFailed && S.vizSrc !== "beat"){
     vizAnalyser.getByteFrequencyData(vizFreq);
     // log-spaced bands from ~40 Hz to ~14 kHz
     const nyq = actx.sampleRate/2, bins = vizFreq.length;
@@ -1829,7 +1889,7 @@ function vizFrame(now){
   }
 
   // 5. waveform line across the middle (microphone only)
-  if(vizAnalyser && !vizMicFailed && S.vizLevel !== "chill"){
+  if(vizAnalyser && !vizMicFailed && S.vizSrc !== "beat" && S.vizLevel !== "chill"){
     vizAnalyser.getByteTimeDomainData(vizWave);
     c.strokeStyle = `hsla(${(hue+120)%360},100%,70%,.55)`; c.lineWidth = 2; c.beginPath();
     for(let i = 0; i < vizWave.length; i += 4){ const x = i/vizWave.length*W, y = H*.5 + (vizWave[i]-128)/128*H*.18; i ? c.lineTo(x, y) : c.moveTo(x, y); }
@@ -1857,20 +1917,36 @@ function vizFrame(now){
 }
 
 // settings
+const VIZ_HOW = {
+  system: "Click “Connect computer sound” once each time you open Focus Jams. In the window that pops up, choose “Entire screen” and turn on “Also share system audio” (Chrome or Edge on Windows). This works for the Spotify app and the built-in player. Nothing is recorded or sent anywhere.",
+  mic: "Listens to the speakers through a microphone. If your computer lists “Stereo Mix” (or another loopback input) below, pick it to use the computer's sound directly, with no prompt each time. Nothing is recorded or sent anywhere.",
+  beat: "No audio needed: the lights pulse at a steady tempo. Press T a few times in time with the music to match it."
+};
 function renderVizUI(){
   $("s-viz").checked = S.viz; $("s-vizLevel").value = S.vizLevel; $("s-vizSrc").value = S.vizSrc; $("s-vizStrobe").checked = S.vizStrobe;
   $("vizMic").hidden = S.vizSrc !== "mic";
+  $("vizSys").hidden = S.vizSrc !== "system";
+  $("vizSys").textContent = vizSysStream ? "🔊 Connected (click to reconnect)" : "🔊 Connect computer sound";
+  $("vizDevRow").hidden = S.vizSrc !== "mic";
+  $("vizHow").textContent = VIZ_HOW[S.vizSrc] || "";
+  if(S.vizSrc === "mic") vizListDevices();
   $("vizPrev").textContent = vizPreview ? "■ Stop preview (V)" : "▶ Preview (V)";
 }
 $("s-viz").onchange = e => { S.viz = e.target.checked; save(); vizUpdate(); };
 $("s-vizLevel").onchange = e => { S.vizLevel = e.target.value; save(); };
 $("s-vizStrobe").onchange = e => { S.vizStrobe = e.target.checked; save(); };
 $("s-vizSrc").onchange = e => {
-  S.vizSrc = e.target.value; save(); renderVizUI();
-  if(S.vizSrc === "beat"){ vizStopMic(); vizMicFailed = false; vizMsg(`Following a steady beat at ${S.vizBpm} BPM. Press T a few times in time with the music to match it.`); }
+  S.vizSrc = e.target.value; save(); vizMsg("");
+  vizStopMic(); vizDetach(); vizMicFailed = false;
+  if(S.vizSrc === "beat") vizMsg(`Following a steady beat at ${S.vizBpm} BPM.`);
+  else if(S.vizSrc === "system"){ if(vizSysStream) vizAttach(vizSysStream); }
   else if(vizOn) vizStartMic(true);
+  renderVizUI(); vizUpdate();
 };
-$("vizMic").onclick = async () => { unlockAudio(); const ok = await vizStartMic(true); if(ok && !vizOn) vizStopMic(); };
+$("s-vizDev").onchange = e => { S.vizDev = e.target.value; save(); vizStopMic(); vizStartMic(true).then(ok => { if(ok && !vizOn) vizStopMic(); }); };
+$("vizMic").onclick = async () => { unlockAudio(); const ok = await vizStartMic(true); if(ok && !vizOn) vizStopMic(); renderVizUI(); };
+$("vizSys").onclick = async () => { unlockAudio(); vizStopSystem(); vizDetach(); await vizStartSystem(); renderVizUI(); };
+$("vizConnect").onclick = async () => { unlockAudio(); await vizStartSystem(); renderVizUI(); };
 $("vizPrev").onclick = () => { vizTogglePreview(); renderVizUI(); $("look").close(); };
 renderVizUI();
 
