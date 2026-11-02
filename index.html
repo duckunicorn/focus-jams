@@ -237,6 +237,87 @@
   .sb-close{margin-top:clamp(18px,3vh,40px)}
   @media (max-width:760px){ .sb{flex-direction:column;text-align:center} .sb .qrbig{width:min(80vw,60vh)} }
 
+  /* ===== group: crew card, toasts, recap ===== */
+  .grid > section.timer-card{grid-row:span 2}
+  .crew-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .crew-tot{font-size:13px;color:var(--muted)}
+  .crew-list{display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow:auto}
+  .crew-row{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;background:var(--panel2);border-radius:12px;padding:7px 10px}
+  .crew-row.off{opacity:.45}
+  .crew-row .em{font-size:20px;text-align:center}
+  .crew-row .nm{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .crew-row .gl{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .crew-row .gl.done{color:var(--accent);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--accent) 60%,transparent)}
+  .crew-row .mn{font:600 13px "JetBrains Mono",monospace;color:var(--muted);white-space:nowrap}
+  .crew-empty{font-size:14px;color:var(--muted);line-height:1.5}
+  .jail{background:color-mix(in srgb,#ff3b3b 22%,transparent);border:1px solid color-mix(in srgb,#ff3b3b 55%,transparent);border-radius:12px;padding:8px 12px;margin-bottom:10px;font-size:14px}
+  .jail b{color:#ff8a8a}
+  body.stage .crew-row .nm{font-size:clamp(14px,1.1vw,22px)} body.stage .crew-row .gl{font-size:clamp(13px,.95vw,19px)}
+  body.stage .crew-row .mn{font-size:clamp(12px,.9vw,18px)} body.stage .crew-row .em{font-size:clamp(18px,1.5vw,30px)}
+  body.stage .crew-row{grid-template-columns:clamp(28px,2.2vw,44px) 1fr auto}
+  body.stage .crew-tot,body.stage .jail{font-size:clamp(13px,1vw,20px)}
+  body.stage .chips{display:none}
+  /* projector: fit everything on one screen; the crew card takes whatever height is left */
+  body.stage.crew .wrap{height:100vh;display:flex;flex-direction:column}
+  body.stage.crew .grid{flex:1;min-height:0;grid-template-rows:auto minmax(0,1fr)}
+  body.stage.crew .timer-card{align-self:start}
+  body.stage.crew #crewCard{display:flex;flex-direction:column;min-height:0;margin-bottom:0;align-self:stretch;overflow:hidden}
+  body.stage.crew .ringbox{width:min(52vh,40vw)}
+  body.stage.crew #crewCard[hidden]{display:none}
+  body.stage.crew .crew-list{flex:1;max-height:none;scrollbar-width:none}
+  body.stage.crew .crew-list::-webkit-scrollbar{display:none}
+  body.stage.crew .sync-row .qrmini{width:clamp(100px,min(9vw,16vh),200px);height:clamp(100px,min(9vw,16vh),200px)}
+  body.stage.crew #embedPane .musicstate{display:none}
+  body.stage.crew #embed{min-height:80px}
+  body.stage.crew #embed iframe{height:80px !important}
+  body.stage.crew #npArt{width:clamp(56px,9vh,130px);height:clamp(56px,9vh,130px)}
+  body.stage.crew .np-ctrl,body.stage.crew #np .bar,body.stage.crew #np .np-times{display:none}
+  body.stage.crew .np-title{font-size:clamp(17px,1.8vw,36px)}
+  body.stage.crew h2{margin-bottom:2px}
+  body.stage.crew .card{padding:clamp(14px,1.5vw,30px)}
+  body.stage.crew .jam{margin-top:10px;padding-top:10px}
+  .gtoasts{position:fixed;left:50%;top:13vh;transform:translateX(-50%);z-index:8;display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none}
+  .gtoast{display:flex;align-items:center;gap:14px;background:rgba(0,0,0,.8);color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:18px;padding:12px 20px;
+    font:700 clamp(16px,1.6vw,30px) "Space Grotesk",system-ui,sans-serif;box-shadow:0 12px 40px -10px var(--accent);animation:gtin .45s cubic-bezier(.2,1.4,.4,1)}
+  .gtoast img{width:clamp(60px,6vw,120px);height:clamp(60px,6vw,120px);object-fit:cover;border-radius:12px}
+  .gtoast.out{opacity:0;transform:translateY(-10px);transition:all .4s}
+  @keyframes gtin{from{opacity:0;transform:scale(.8) translateY(-10px)}}
+  .burst{position:fixed;z-index:8;pointer-events:none;font-size:clamp(22px,2.4vw,44px);animation:burst 1.6s ease-out forwards}
+  @keyframes burst{to{transform:translate(var(--dx),var(--dy)) rotate(var(--rot));opacity:0}}
+  .recap{position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.9);overflow:auto;display:none;color:#fff}
+  .recap.on{display:block}
+  .recap-in{max-width:1200px;margin:0 auto;padding:4vh 4vw 6vh}
+  .recap h1{font-size:clamp(30px,4vw,70px);margin:0;letter-spacing:-.02em;text-shadow:0 0 30px var(--accent)}
+  .recap .when{color:rgba(255,255,255,.7);font-size:clamp(14px,1.3vw,24px);margin-top:6px}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:3vh 0}
+  .tile{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px 16px}
+  .tile b{display:block;font:700 clamp(24px,2.6vw,48px) "JetBrains Mono",monospace;color:var(--accent)}
+  .tile span{font-size:13px;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.1em}
+  .lb{width:100%;border-collapse:collapse;font-size:clamp(14px,1.2vw,22px)}
+  .lb th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.6);padding:6px 8px}
+  .lb td{padding:8px;border-top:1px solid rgba(255,255,255,.1)}
+  .lb td.g{color:rgba(255,255,255,.75);font-size:.85em}
+  .recap .collage{width:100%;border-radius:16px;margin-top:2vh;display:block}
+  .recap-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:2vh}
+  .hist-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:var(--panel2);border-radius:12px;padding:8px 12px;margin-top:6px;font-size:13px}
+  .hist-row b{font-size:14px}
+  .ptable{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  .ptable th{text-align:left;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:4px 6px}
+  .ptable td{padding:6px;border-top:1px solid var(--line)}
+  /* phone: me / recap / history */
+  .ph-me .row{margin:10px 0 0}
+  .ph-name{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .ph-name b{font-size:18px}
+  .emojis{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+  .emojis button{font-size:22px;background:var(--panel2);border:2px solid transparent;border-radius:10px;padding:4px 6px;cursor:pointer}
+  .emojis button.on{border-color:var(--accent)}
+  .ph-goal{font-size:16px;font-weight:600;margin-top:8px}
+  .ph-goal.done{color:var(--accent);text-decoration:line-through}
+  .ph-stat{font-size:14px;color:var(--muted);margin-top:8px}
+  .ph-jail{background:color-mix(in srgb,#ff3b3b 22%,transparent);border-radius:10px;padding:8px 10px;margin-top:10px;font-size:13px}
+  #phRecap img{width:100%;border-radius:12px;margin-top:10px}
+  .ph-hist{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6}
+
   /* phone view (?sync=CODE) */
   body.phone .wrap{display:none}
   #phone{max-width:460px;margin:0 auto;padding:18px 16px 40px;min-height:100vh;display:flex;flex-direction:column;gap:16px}
@@ -269,6 +350,7 @@
     <div class="clock" title="Current time"><div class="clock-t" id="clockT">--:--</div><div class="clock-d" id="clockD"></div></div>
     <div class="hdr-r">
       <div class="count" id="count">0 focus sessions today</div>
+      <button class="ghost sm" id="nightBtn" hidden title="End tonight and show the recap">🏁 End night</button>
       <button class="ghost sm" id="stageBtn" title="Projector mode (F)">📽 Projector</button>
       <button class="ghost sm" id="jamOpen">📱 Jam QR</button>
       <button class="ghost sm" id="lookOpen">🎨 Customize</button>
@@ -277,7 +359,7 @@
 
   <div class="grid">
     <!-- TIMER -->
-    <section class="card">
+    <section class="card timer-card">
       <div class="tabs" role="tablist">
         <button class="tab on" data-m="focus">Focus</button>
         <button class="tab" data-m="short">Short break</button>
@@ -398,10 +480,21 @@
           </div>
         </div>
       </div>
-      <p class="hint"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>S</kbd> skip · <kbd>F</kbd> projector · <kbd>Q</kbd> big QR · <kbd>V</kbd> visualizer · <kbd>T</kbd> tap tempo</p>
+      <p class="hint" id="kbdHint"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>S</kbd> skip · <kbd>F</kbd> projector · <kbd>Q</kbd> big QR · <kbd>V</kbd> visualizer · <kbd>T</kbd> tap tempo</p>
+    </section>
+
+    <!-- CREW -->
+    <section class="card" id="crewCard" hidden>
+      <div class="crew-h"><h2>👥 The crew</h2><span class="crew-tot" id="crewTot"></span></div>
+      <div class="jail" id="jailBox" hidden></div>
+      <div class="crew-list" id="crewList"></div>
     </section>
   </div>
 </div>
+
+<!-- GROUP TOASTS + RECAP -->
+<div class="gtoasts" id="gToasts"></div>
+<div class="recap" id="recap"><div class="recap-in" id="recapIn"></div></div>
 
 <!-- BIG "SCAN TO FOLLOW ALONG" -->
 <dialog id="syncBig">
@@ -440,6 +533,34 @@
     <a class="big btnlink" id="phJam" href="#" target="_blank" rel="noopener" hidden style="color:var(--accent-ink)">🎧 Join the Jam on Spotify</a>
     <button class="ghost" id="phLyr" hidden>🎤 Lyrics &amp; karaoke</button>
   </div>
+  <div class="card ph-me" id="phNameBox" hidden>
+    <b style="font-size:18px">Join the crew 👋</b>
+    <p class="hint" style="margin:4px 0 0">Pick a name and an emoji so you show up on the big screen.</p>
+    <div class="row"><input type="text" id="phNameIn" maxlength="24" placeholder="Your name"></div>
+    <div class="emojis" id="phEmojis"></div>
+    <button class="big sm" id="phNameSave" style="width:100%">Join</button>
+  </div>
+  <div class="card ph-me" id="phMe" hidden>
+    <div class="ph-name"><b id="phMeName"></b><button class="ghost sm" id="phRename">✏️ Edit</button></div>
+    <div id="phGoalBox" hidden>
+      <div id="phGoalSet">
+        <div class="row"><input type="text" id="phGoalIn" maxlength="60" placeholder="What are you working on?"></div>
+        <button class="big sm" id="phGoalSave" style="width:100%;margin-top:8px">🎯 Set my goal</button>
+      </div>
+      <div id="phGoalShow" hidden>
+        <div class="ph-goal" id="phGoalTxt"></div>
+        <div class="testrow"><button class="big sm" id="phGoalDone">✅ Done!</button><button class="ghost sm" id="phGoalNew">New goal</button></div>
+      </div>
+    </div>
+    <div class="ph-stat" id="phStats" hidden></div>
+    <div class="ph-jail" id="phJail" hidden></div>
+    <div id="phPhotoBox" hidden style="margin-top:12px">
+      <label class="ghost" style="display:block;text-align:center">📸 Add photos to the album<input type="file" id="phPhotoIn" accept="image/*" multiple hidden></label>
+      <div class="hint" id="phPhotoMsg" style="margin-top:6px"></div>
+    </div>
+  </div>
+  <div class="card" id="phRecap" hidden></div>
+  <details class="card" id="phHistBox" hidden><summary>📈 My history</summary><div class="ph-hist" id="phHist"></div></details>
   <div class="card" id="phHelp" hidden>
     <b>Can't reach the big screen?</b>
     <ul class="hint" style="margin:8px 0 0;padding-left:18px;line-height:1.6">
@@ -458,8 +579,9 @@
     <div class="dlg-h"><h2>Customize</h2><button class="big sm" id="lookClose">Done</button></div>
     <div class="seg" id="dlgTabs">
       <button data-p="dlgLook" class="on">🎨 Look</button>
-      <button data-p="dlgTimer">⏱ Timer &amp; sounds</button>
+      <button data-p="dlgTimer">⏱ Timer</button>
       <button data-p="dlgMusic">🎵 Music</button>
+      <button data-p="dlgGroup">👥 Group</button>
       <button data-p="dlgBackup">💾 Backup</button>
     </div>
 
@@ -571,15 +693,43 @@
       <p class="hint">With your Spotify app connected and playlist switching on, the timer starts the focus or break playlist on whatever device is playing. In a Jam, that changes the music for everyone listening.</p>
     </div>
 
+    <div id="dlgGroup" class="dpane" hidden>
+      <h3>Group features</h3>
+      <p class="hint" style="margin-top:0">These use phone sync: people scan the QR code, pick a name, and their phone talks to this screen.</p>
+      <div class="toggles" style="margin-top:6px">
+        <label><input type="checkbox" id="s-gGoals"> 🎯 Goals wall: everyone posts what they're working on and taps “done” to celebrate</label>
+        <label><input type="checkbox" id="s-gJail"> 📵 Phone jail: leaving the Focus Jams page during focus puts your name in “phone jail” on screen</label>
+        <label><input type="checkbox" id="s-gStats"> 📊 Group stats: focus minutes and sessions for each person</label>
+        <label><input type="checkbox" id="s-gPhotos"> 📸 Photo album: phones add photos, and the night ends with a group collage</label>
+      </div>
+      <div class="sounds">
+        <label>Room name<input type="text" id="s-roomName" maxlength="40" placeholder="Focus Jams room"></label>
+        <label>Phone jail after<select id="s-jailGrace"><option value="10">10 seconds away</option><option value="20">20 seconds away</option><option value="30">30 seconds away</option><option value="60">1 minute away</option></select></label>
+      </div>
+      <p class="hint">Phone jail: phones can't tell switching apps apart from locking the screen, so while it's on, the Focus Jams page keeps phone screens awake. Tell people to put their phone face down instead of locking it.</p>
+
+      <h3>Tonight</h3>
+      <div class="testrow" style="margin-top:0">
+        <button class="big sm" id="endNightBtn">🏁 End tonight &amp; show the recap</button>
+      </div>
+      <p class="hint" id="nightInfo"></p>
+
+      <h3>Room history</h3>
+      <div id="histNights"></div>
+      <h3>People (all time)</h3>
+      <div id="histPeople"></div>
+      <div class="testrow"><button class="ghost sm" id="histClear">Clear history</button></div>
+    </div>
+
     <div id="dlgBackup" class="dpane" hidden>
       <h3>Back up your setup</h3>
-      <p class="sub" style="margin-bottom:10px">Save everything to one file: colors, background (including an uploaded picture), timer and sound settings, your custom sounds with their lengths, playlists, visualizer settings and Jam link. Load it on another computer or browser to get the same setup.</p>
+      <p class="sub" style="margin-bottom:10px">Save everything to one file: colors, background (including an uploaded picture), timer and sound settings, your custom sounds with their lengths, playlists, visualizer settings, group settings, Jam link, and room and people history. Load it on another computer or browser to get the same setup.</p>
       <div class="testrow" style="margin-top:0">
         <button class="big sm" id="bkExport">⬇ Download backup</button>
         <label class="ghost sm">⬆ Load a backup<input type="file" id="bkImport" accept=".json,application/json" hidden></label>
       </div>
       <p class="hint" id="bkMsg"></p>
-      <p class="hint">Not included: your Spotify sign-in (just click Connect on the new computer) and the phone sync code (each computer gets its own QR code, so two screens never clash). Loading a backup replaces this browser's current setup.</p>
+      <p class="hint">Not included: your Spotify sign-in (just click Connect on the new computer), group photos (download them from the night's recap) and the phone sync code (each computer gets its own QR code, so two screens never clash). Loading a backup replaces this browser's current setup.</p>
     </div>
 
     <div id="dlgLook" class="dpane">
@@ -696,6 +846,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              viz:true, vizLevel:"party", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
              vizStopAtEnd:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
              fadeMusic:true, fadeSecs:4,
+             gGoals:true, gJail:true, gStats:true, gPhotos:true, jailGrace:20, roomName:"", deviceId:"",
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -876,6 +1027,7 @@ function start(){
   unlockAudio();
   if(S.notify && "Notification" in window && Notification.permission === "default") Notification.requestPermission();
   running = true; endAt = Date.now() + remaining*1000;
+  if(mode === "focus" && typeof ensureNight === "function") ensureNight();
   scheduleEndSound();
   timer = setInterval(tick, 250); render(); syncMusic();
 }
@@ -911,6 +1063,7 @@ function finish(){
   setMode(n);
   if(S.auto) start();
   if(was !== "focus") breakEnded();
+  else groupSessionDone();
 }
 var endMsgT = null, endMsgSeq = 0;
 // called whenever a break finishes or is skipped
@@ -1000,16 +1153,20 @@ var customSounds = {}, customLoaded = false;   // id -> {id, name, blob, buffer}
 function idb(){
   return new Promise((res, rej) => {
     try{
-      const r = indexedDB.open("focusjams", 1);
-      r.onupgradeneeded = () => r.result.createObjectStore("sounds", {keyPath:"id"});
+      const r = indexedDB.open("focusjams", 2);
+      r.onupgradeneeded = () => {
+        const db = r.result;
+        if(!db.objectStoreNames.contains("sounds")) db.createObjectStore("sounds", {keyPath:"id"});
+        if(!db.objectStoreNames.contains("photos")) db.createObjectStore("photos", {keyPath:"id"}).createIndex("night", "night");
+      };
       r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
     }catch(e){ rej(e); }
   });
 }
-async function idbDo(mode, fn){
+async function idbDo(mode, fn, store = "sounds"){
   const db = await idb();
   return new Promise((res, rej) => {
-    const tx = db.transaction("sounds", mode), st = tx.objectStore("sounds"), r = fn(st);
+    const tx = db.transaction(store, mode), st = tx.objectStore(store), r = fn(st);
     tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error);
   });
 }
@@ -1663,7 +1820,7 @@ checks.forEach(k => {
 });
 
 /* customize dialog */
-$("lookOpen").onclick = () => { renderLookUI(); renderPlUI(); renderVizUI(); $("look").showModal(); };
+$("lookOpen").onclick = () => { renderLookUI(); renderPlUI(); renderVizUI(); renderGroupUI(); $("look").showModal(); };
 $("dlgTabs").onclick = e => {
   const b = e.target.closest("button"); if(!b) return;
   document.querySelectorAll("#dlgTabs button").forEach(x => x.classList.toggle("on", x === b));
@@ -1760,7 +1917,8 @@ function syncState(){
     cycle, every:S.every, done:stats.done, colors:c,
     song: curTrack && curTrack.name ? {uri:curTrack.uri, name:curTrack.name, artist:curTrack.artist || "", art:curTrack.art || ""} : null,
     playing, jam:S.jamLink, t:Date.now(), endEpoch: running ? endAt : 0,
-    endMsg: S.endMsgOn ? {seq:endMsgSeq, text:S.endMsg, secs:S.endMsgSecs} : null};
+    endMsg: S.endMsgOn ? {seq:endMsgSeq, text:S.endMsg, secs:S.endMsgSecs} : null,
+    g: groupState()};
 }
 function broadcast(){
   if(!syncReady || !conns.size) return;
@@ -1777,7 +1935,7 @@ const RELAY = () => window.FJ_RELAY || "https://ntfy.sh";
 const relayTopic = code => "focusjams-" + code;
 function relayKey(st){
   return JSON.stringify([st.mode, st.running, st.running ? Math.round(st.endEpoch/1000) : Math.round(st.remaining/1000),
-    st.cycle, st.every, st.done, st.colors, st.song && st.song.uri, st.song && st.song.name, st.song && st.song.art, st.playing, st.jam]);
+    st.cycle, st.every, st.done, st.colors, st.song && st.song.uri, st.song && st.song.name, st.song && st.song.art, st.playing, st.jam, st.g]);
 }
 function relayPublish(force){
   if(SYNC || !S.phoneSync || LOCAL_ONLY || !S.syncCode) return;
@@ -1786,7 +1944,7 @@ function relayPublish(force){
   const wait = Math.max(relayLastAt + 3000, relayBackoff) - Date.now();   // at most one post every 3s
   if(wait > 0){ clearTimeout(relayT); relayT = setTimeout(() => relayPublish(force), wait); return; }
   relayLastKey = key; relayLastAt = Date.now();
-  fetch(RELAY() + "/" + relayTopic(S.syncCode), {method:"POST", body:JSON.stringify(syncState())})
+  fetch(RELAY() + "/" + relayTopic(S.syncCode), {method:"POST", body:relayBody()})
     .then(r => { if(r.status === 429){ relayLastKey = ""; relayBackoff = Date.now() + 60000; relayPublish(); } })
     .catch(() => { relayLastKey = ""; relayBackoff = Date.now() + 15000; relayPublish(); });
 }
@@ -1815,13 +1973,15 @@ async function startHost(){
   if(!S.phoneSync || LOCAL_ONLY) return;
   if(!S.syncCode){ S.syncCode = newCode(); save(); renderSyncBox(); }
   relayLastKey = ""; relayPublish(true);
+  startRelayInbox();
   try{ await loadPeerJs(); }catch(e){ $("syncCount").textContent = "Couldn't load phone sync"; return; }
   const p = peer = new Peer(PEER_PREFIX + S.syncCode, peerOpts());
   p.on("open", () => { if(p !== peer) return; syncReady = true; renderSyncBox(); });
   p.on("connection", c => {
     c.on("open", () => { conns.add(c); renderSyncBox(); c.send(syncState()); });
-    c.on("close", () => { conns.delete(c); renderSyncBox(); });
-    c.on("error", () => { conns.delete(c); renderSyncBox(); });
+    c.on("data", d => groupMsg(d, c));
+    c.on("close", () => { conns.delete(c); groupConnClosed(c); renderSyncBox(); });
+    c.on("error", () => { conns.delete(c); groupConnClosed(c); renderSyncBox(); });
   });
   // Losing the matchmaking server does NOT affect phones that are already connected (they talk to us
   // directly), so just quietly reconnect to it in the background and leave existing phones alone.
@@ -1882,6 +2042,9 @@ function phApply(st, via){
   }
   $("phJam").hidden = !st.jam; if(st.jam) $("phJam").href = st.jam;
   $("phLyr").hidden = !(sg && /^spotify:track:/.test(sg.uri));
+  // first update through the relay (no direct connection): introduce ourselves that way
+  if(via === "relay" && st.g && me.name && !(phConn && phConn.open) && !phApply.helloed){ phApply.helloed = true; phHello(); }
+  phGroupRender(st.g || null);
   phTick();
 }
 function phTick(){
@@ -1952,8 +2115,8 @@ async function startPhone(){
     }
     if(!phPeer.open) return;                        // waiting for the matchmaking server; "open" will call us
     const c = phConn = phPeer.connect(PEER_PREFIX + SYNC, {reliable:true});
-    c.on("open", () => { if(c !== phConn) return; phOffline = false; lastData = Date.now(); });
-    c.on("data", d => { if(c !== phConn) return; lastData = Date.now(); phApply(d, "peer"); });
+    c.on("open", () => { if(c !== phConn) return; phOffline = false; lastData = Date.now(); phHello(); });
+    c.on("data", d => { if(c !== phConn) return; lastData = Date.now(); if(d && d.t) phMsg(d); else phApply(d, "peer"); });
     const lost = () => { if(c !== phConn) return; phConn = null; retry(2000); };
     c.on("close", lost);
     c.on("error", lost);
@@ -2300,7 +2463,7 @@ $("vizPrev").onclick = () => { vizTogglePreview(); renderVizUI(); $("look").clos
 renderVizUI();
 
 /* ================= backup: export / import ================= */
-const BACKUP_SKIP = ["syncCode"];   // per-computer; Spotify sign-in lives elsewhere and is never exported
+const BACKUP_SKIP = ["syncCode", "deviceId"];   // per-computer; Spotify sign-in lives elsewhere and is never exported
 const blobToDataUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
 const dataUrlToBlob = async u => (await fetch(u)).blob();
 async function exportBackup(){
@@ -2310,7 +2473,7 @@ async function exportBackup(){
     const settings = Object.assign({}, S); BACKUP_SKIP.forEach(k => delete settings[k]);
     const sounds = [];
     for(const c of Object.values(customSounds)) sounds.push({id:c.id, name:c.name, start:c.start || 0, len:c.len || CUSTOM_DEFAULT_SECS, data:await blobToDataUrl(c.blob)});
-    const data = {app:"focus-jams", version:1, exported:new Date().toISOString(), settings, backgroundImage:uploadedImg || null, sounds};
+    const data = {app:"focus-jams", version:1, exported:new Date().toISOString(), settings, backgroundImage:uploadedImg || null, sounds, history:store.get("fj-hist") || null};
     const url = URL.createObjectURL(new Blob([JSON.stringify(data)], {type:"application/json"}));
     const a = document.createElement("a");
     a.href = url; a.download = `focus-jams-backup-${new Date().toISOString().slice(0,10)}.json`;
@@ -2345,6 +2508,7 @@ async function importBackup(file){
     // background picture
     if(typeof data.backgroundImage === "string" && data.backgroundImage.startsWith("data:image/")) store.set("fj-img", data.backgroundImage);
     else store.set("fj-img", null);
+    if(data.history && typeof data.history === "object" && Array.isArray(data.history.nights)) store.set("fj-hist", data.history);
     store.set("fj-settings", next);
     msg("Loaded! Reloading to apply…");
     setTimeout(() => location.reload(), 700);
@@ -2354,6 +2518,559 @@ async function importBackup(file){
 function confirmImport(){ return window.FJ_AUTO_CONFIRM || confirm("Replace this browser's Focus Jams setup with the backup? (Your Spotify sign-in stays.)"); }
 $("bkExport").onclick = exportBackup;
 $("bkImport").onchange = e => { importBackup(e.target.files[0]); e.target.value = ""; };
+
+/* ================= group: people, goals, phone jail, stats, photos, history ================= */
+// The projector keeps tonight's "night" (who joined, goals, focus minutes...). Phones send small messages
+// back over their direct connection, or through the relay if they can't connect directly. Photos need direct.
+var night = null, people = {}, connPerson = new Map(), lastRecap = null, gTickAt = Date.now(), nightSaveT = null, seenMids = [];
+const EMOJIS = ["🦊","🐼","🐸","🐙","🦄","🐝","🐢","🦖","🐧","🦉","🐳","🍕","🌵","🔥","⚡","🌙","🎧","🚀","🍩","👾"];
+const gOn = () => S.phoneSync && !LOCAL_ONLY;
+const roomName = () => (S.roomName || "").trim() || "Focus Jams room";
+const minsTxt = ms => { const m = Math.round(ms/60000); return m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`; };
+const escH = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const clean = (t, n) => String(t ?? "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
+function getHist(){ const h = store.get("fj-hist"); return h && Array.isArray(h.nights) ? h : {nights:[], people:{}}; }
+
+/* ----- nights ----- */
+function ensureNight(){
+  if(night || SYNC) return night;
+  night = {id:newCode(), room:roomName(), start:Date.now(), last:Date.now(), focusMs:0, sessions:0, goalsDone:0, jailVisits:0, photos:0, people:{}};
+  people = night.people; lastRecap = null;
+  saveNight(); renderCrew(); syncSoon();
+  return night;
+}
+function saveNight(now){
+  clearTimeout(nightSaveT);
+  const doSave = () => store.set("fj-night", night);
+  if(now) doSave(); else nightSaveT = setTimeout(doSave, 3000);
+}
+function summarize(n){
+  const ppl = Object.values(n.people).map(p => ({id:p.id, name:p.name, emoji:p.emoji, focusMs:Math.round(p.focusMs), sessions:p.sessions,
+    goalsDone:p.goalsDone, goals:p.goalsList.slice(-10), jailVisits:p.jailVisits})).sort((a,b) => b.focusMs - a.focusMs);
+  return {id:n.id, room:n.room || roomName(), start:n.start, end:n.last, focusMs:Math.round(n.focusMs), sessions:n.sessions,
+    goalsDone:n.goalsDone, jailVisits:n.jailVisits, photos:n.photos, people:ppl};
+}
+function archive(n){
+  const r = summarize(n);
+  if(!r.people.length && r.focusMs < 60000 && !r.photos) return null;   // nothing happened: don't clutter history
+  const h = getHist();
+  h.nights = h.nights.filter(x => x.id !== r.id); h.nights.unshift(r); h.nights = h.nights.slice(0, 300);
+  for(const p of r.people){
+    const a = h.people[p.id] || {name:p.name, emoji:p.emoji, nights:0, focusMs:0, sessions:0, goalsDone:0, jailVisits:0};
+    Object.assign(a, {name:p.name, emoji:p.emoji, last:r.end});
+    a.nights++; a.focusMs += p.focusMs; a.sessions += p.sessions; a.goalsDone += p.goalsDone; a.jailVisits += p.jailVisits;
+    h.people[p.id] = a;
+  }
+  store.set("fj-hist", h);
+  return r;
+}
+function endNight(){
+  if(!night){ gToast("No night in progress yet. It starts when the first focus session starts or someone joins."); return; }
+  if(running) pause();
+  night.last = Date.now();
+  const r = archive(night) || summarize(night);
+  night = null; people = {}; store.set("fj-night", null);
+  lastRecap = r;
+  renderCrew(); renderGroupUI(); syncSoon(); relayPublish(true);
+  showRecap(r);
+}
+function loadNight(){
+  if(SYNC) return;
+  const n = store.get("fj-night");
+  if(!n || !n.people) return;
+  if(Date.now() - (n.last || 0) > 8*3600*1000){ archive(n); store.set("fj-night", null); return; }   // last night was left open
+  night = n; people = n.people;
+  for(const p of Object.values(people)){ p.online = false; p.via = null; }
+}
+
+/* ----- people ----- */
+function upsertPerson(m, via){
+  const id = clean(m.from, 40); if(!id) return null;
+  ensureNight();
+  let p = people[id];
+  if(!p) p = people[id] = {id, name:"", emoji:"🙂", goal:"", goalDone:false, goalsDone:0, goalsList:[], focusMs:0, sessions:0,
+    jailVisits:0, away:false, awaySince:0, jailed:false, online:true, lastSeen:Date.now(), joined:Date.now(), via};
+  p.online = true; p.lastSeen = Date.now(); p.via = via;
+  return p;
+}
+function groupMsg(m, conn){
+  if(!m || typeof m !== "object" || !m.t || !gOn()) return;
+  if(m.mid){ if(seenMids.includes(m.mid)) return; seenMids.push(m.mid); if(seenMids.length > 300) seenMids.shift(); }
+  if(m.t === "getCollage"){ if(conn) sendCollage(conn, m.night); return; }
+  const p = upsertPerson(m, conn ? "peer" : "relay"); if(!p) return;
+  if(conn) connPerson.set(conn, p.id);
+  let changed = true;
+  switch(m.t){
+    case "hello": {
+      const isNew = !p.name;
+      p.name = clean(m.name, 24) || p.name || "Someone"; p.emoji = EMOJIS.includes(m.emoji) ? m.emoji : p.emoji;
+      if(isNew) gToast(`${p.emoji} ${escH(p.name)} joined`);
+      if(typeof m.away === "boolean") setAway(p, m.away);
+      break;
+    }
+    case "goal":
+      if(!S.gGoals) return;
+      p.goal = clean(m.text, 60); p.goalDone = false;
+      break;
+    case "done":
+      if(!S.gGoals || !p.goal || p.goalDone) return;
+      p.goalDone = true; p.goalsDone++; p.goalsList.push(p.goal); night.goalsDone++;
+      celebrate(`🎉 ${p.emoji} ${escH(p.name)} finished: ${escH(p.goal)}`);
+      break;
+    case "away": setAway(p, !!m.away); break;
+    case "bye": p.online = false; p.away = false; p.jailed = false; break;
+    case "ping": changed = false; break;
+    case "photo": savePhoto(p, m); changed = false; break;
+    default: return;
+  }
+  if(changed){ night.last = Date.now(); saveNight(); renderCrew(); syncSoon(); }
+}
+function setAway(p, away){
+  if(away && !p.away){ p.away = true; p.awaySince = Date.now(); }
+  else if(!away && p.away){
+    p.away = false;
+    if(p.jailed){ p.jailed = false; gToast(`🔓 ${p.emoji} ${escH(p.name)} is out of phone jail`); }
+  }
+}
+function groupConnClosed(c){
+  const id = connPerson.get(c); connPerson.delete(c);
+  const p = id && people[id];
+  if(p && !Array.from(connPerson.values()).includes(id)){ p.online = false; p.lastSeen = Date.now(); renderCrew(); }
+}
+function isOnline(p){ return p.via === "relay" ? Date.now() - p.lastSeen < 70000 : p.online; }
+
+// once a second: focus minutes, phone jail
+setInterval(() => {
+  if(SYNC || !night) { gTickAt = Date.now(); return; }
+  const now = Date.now(), dt = Math.min(5000, now - gTickAt); gTickAt = now;
+  const focusing = running && mode === "focus";
+  let changed = false;
+  if(focusing) night.focusMs += dt;
+  for(const p of Object.values(people)){
+    // someone who reported leaving and then dropped off for a long time has really left
+    if(!isOnline(p) && p.away && now - p.lastSeen > 15*60000){ p.away = false; if(p.jailed){ p.jailed = false; changed = true; } }
+    if(focusing && isOnline(p) && !p.away) p.focusMs += dt;
+    if(S.gJail && focusing && p.away && !p.jailed && now - p.awaySince > S.jailGrace*1000){
+      p.jailed = true; p.jailVisits++; night.jailVisits++; changed = true;
+      gToast(`📵 ${p.emoji} ${escH(p.name)} went to phone jail`);
+    }
+    if(p.jailed && (!focusing || !S.gJail)){ p.jailed = false; changed = true; }   // breaks are free time
+  }
+  if(focusing || changed){ night.last = now; saveNight(); }
+  renderCrew();
+  if(changed) syncSoon();
+}, 1000);
+function groupSessionDone(){
+  if(!night) return;
+  night.sessions++;
+  for(const p of Object.values(people)) if(isOnline(p) && !p.jailed) p.sessions++;
+  night.last = Date.now(); saveNight(); renderCrew(); syncSoon();
+}
+
+/* ----- what phones get ----- */
+function groupState(){
+  if(!gOn() || SYNC) return null;
+  const ppl = Object.values(people).map(p => ({id:p.id, n:p.name, e:p.emoji, g:p.goal, d:p.goalDone, j:p.jailed, v:p.jailVisits,
+    m:Math.floor(p.focusMs/60000), s:p.sessions, gd:p.goalsDone}));
+  return {f:{goals:S.gGoals, jail:S.gJail, stats:S.gStats, photos:S.gPhotos}, grace:S.jailGrace, room:roomName(),
+    night: night ? {id:night.id, m:Math.floor(night.focusMs/60000), s:night.sessions, gd:night.goalsDone} : null,
+    ppl, recap: lastRecap};
+}
+// the relay only carries small messages, so trim the crew list (and recap) to fit
+function relayBody(){
+  const st = syncState();
+  let body = JSON.stringify(st);
+  if(body.length > 3800 && st.g){
+    if(st.g.recap) st.g.recap = Object.assign({}, st.g.recap, {people:st.g.recap.people.slice(0, 12).map(p => ({id:p.id, name:p.name, emoji:p.emoji, focusMs:p.focusMs, sessions:p.sessions, goalsDone:p.goalsDone, jailVisits:p.jailVisits}))});
+    st.g.ppl = st.g.ppl.map(p => Object.assign({}, p, {g:p.g ? p.g.slice(0, 24) : ""}));
+    body = JSON.stringify(st);
+    while(body.length > 3800 && st.g.ppl.length){ st.g.ppl.pop(); body = JSON.stringify(st); }
+    if(body.length > 3800 && st.g.recap){ st.g.recap = Object.assign({}, st.g.recap, {people:[]}); body = JSON.stringify(st); }
+  }
+  return body;
+}
+// messages from phones that can only reach the relay
+var inboxES = null;
+function startRelayInbox(){
+  if(inboxES) try{ inboxES.close(); }catch(e){}
+  if(!gOn() || !S.syncCode) return;
+  const code = S.syncCode;
+  try{ inboxES = new EventSource(RELAY() + "/" + relayTopic(code) + "-up/sse"); }catch(e){ return; }
+  inboxES.onmessage = e => {
+    if(code !== S.syncCode) return;
+    let m; try{ m = JSON.parse(e.data); }catch(err){ return; }
+    if(m.event !== "message" || !m.message) return;
+    let msg; try{ msg = JSON.parse(m.message); }catch(err){ return; }
+    if(msg && msg.t !== "photo" && msg.t !== "getCollage") groupMsg(msg, null);
+  };
+}
+
+/* ----- projector UI ----- */
+function renderCrew(){
+  if(SYNC) return;
+  const any = S.gGoals || S.gJail || S.gStats || S.gPhotos;
+  $("crewCard").hidden = !(gOn() && any);
+  document.body.classList.toggle("crew", !$("crewCard").hidden);
+  $("nightBtn").hidden = !(gOn() && night);
+  if($("crewCard").hidden) return;
+  const list = Object.values(people).filter(p => p.name);
+  const jailed = list.filter(p => p.jailed);
+  $("jailBox").hidden = !(S.gJail && jailed.length);
+  if(jailed.length) $("jailBox").innerHTML = "📵 <b>Phone jail:</b> " + jailed.map(p => `${p.emoji} ${escH(p.name)} (${fmt((Date.now() - p.awaySince)/1000)})`).join(", ");
+  const tot = [];
+  if(night && S.gStats) tot.push(`${minsTxt(night.focusMs)} focused`, `${night.sessions} session${night.sessions === 1 ? "" : "s"}`);
+  if(night && S.gGoals && night.goalsDone) tot.push(`${night.goalsDone} goal${night.goalsDone === 1 ? "" : "s"} done`);
+  if(night && S.gPhotos && night.photos) tot.push(`📸 ${night.photos}`);
+  $("crewTot").textContent = tot.join(" · ");
+  if(!list.length){
+    $("crewList").innerHTML = `<div class="crew-empty">Scan the QR code to join.${S.gGoals ? " Your name and goal show up here." : ""}</div>`;
+    return;
+  }
+  list.sort((a,b) => (isOnline(b) - isOnline(a)) || (b.focusMs - a.focusMs) || a.name.localeCompare(b.name));
+  $("crewList").innerHTML = list.map(p => {
+    const goal = !S.gGoals ? "" : p.goal ? `<div class="gl ${p.goalDone ? "done" : ""}">${p.goalDone ? "✅ " : "🎯 "}${escH(p.goal)}</div>` : `<div class="gl">no goal yet</div>`;
+    const stat = S.gStats ? `<span class="mn">${minsTxt(p.focusMs)}${p.goalsDone ? ` · ✅${p.goalsDone}` : ""}</span>` : `<span class="mn">${p.goalsDone && S.gGoals ? "✅" + p.goalsDone : ""}</span>`;
+    return `<div class="crew-row ${isOnline(p) ? "" : "off"}"><span class="em">${p.jailed ? "📵" : p.emoji}</span><div style="min-width:0"><div class="nm">${escH(p.name)}</div>${goal}</div>${stat}</div>`;
+  }).join("");
+}
+(function crewAutoScroll(){
+  let dir = 1, pauseUntil = 0;
+  setInterval(() => {
+    const el = $("crewList");
+    if(SYNC || !el || !document.body.classList.contains("stage") || el.scrollHeight <= el.clientHeight + 4) return;
+    if(Date.now() < pauseUntil || el.matches(":hover")) return;
+    el.scrollTop += dir;
+    if(el.scrollTop + el.clientHeight >= el.scrollHeight - 1){ dir = -1; pauseUntil = Date.now() + 3000; }
+    else if(el.scrollTop <= 0){ dir = 1; pauseUntil = Date.now() + 3000; }
+  }, 40);
+})();
+function gToast(html, img){
+  if(SYNC && !html) return;
+  const el = document.createElement("div"); el.className = "gtoast";
+  el.innerHTML = (img ? `<img src="${img}" alt="">` : "") + `<span>${html}</span>`;
+  $("gToasts").appendChild(el);
+  while($("gToasts").children.length > 3) $("gToasts").firstChild.remove();
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 450); }, 4200);
+}
+function celebrate(html){
+  gToast(html);
+  const party = ["🎉","✨","🥳","⭐","🎊","💥"];
+  for(let i = 0; i < 28; i++){
+    const b = document.createElement("div"); b.className = "burst"; b.textContent = party[i % party.length];
+    b.style.left = (40 + Math.random()*20) + "vw"; b.style.top = "30vh";
+    b.style.setProperty("--dx", (Math.random()*80 - 40) + "vw"); b.style.setProperty("--dy", (Math.random()*60 - 10) + "vh");
+    b.style.setProperty("--rot", (Math.random()*720 - 360) + "deg");
+    document.body.appendChild(b); setTimeout(() => b.remove(), 1700);
+  }
+}
+
+/* ----- photos (projector side) ----- */
+var collageCache = {};
+async function savePhoto(p, m){
+  if(!S.gPhotos || !night || typeof m.data !== "string" || !m.data.startsWith("data:image/jpeg") || m.data.length > 4e6) return;
+  if(night.photos >= 400) return;
+  const blob = await (await fetch(m.data)).blob();
+  const id = clean(m.pid, 40) || newCode();
+  try{ await idbDo("readwrite", st => st.put({id, night:night.id, from:p.id, name:p.name, ts:Date.now(), blob}), "photos"); }catch(e){ return; }
+  night.photos++; delete collageCache[night.id];
+  night.last = Date.now(); saveNight(); renderCrew(); syncSoon();
+  gToast(`📸 ${p.emoji} ${escH(p.name)} added a photo`, m.data);
+}
+async function nightPhotos(nightId){
+  try{ return (await idbDo("readonly", st => st.index("night").getAll(nightId), "photos")) || []; }catch(e){ return []; }
+}
+async function buildCollage(r){
+  if(collageCache[r.id]) return collageCache[r.id];
+  const photos = (await nightPhotos(r.id)).sort((a,b) => a.ts - b.ts);
+  if(!photos.length) return null;
+  const imgs = [];
+  for(const ph of photos){ try{ imgs.push(await createImageBitmap(ph.blob)); }catch(e){} }
+  const n = imgs.length, cols = Math.ceil(Math.sqrt(n * 1.3)), rows = Math.ceil(n / cols);
+  const W = 2400, pad = 16, head = 150, cw = (W - pad*(cols + 1)) / cols, ch = cw * .75;
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = Math.round(head + rows*(ch + pad) + pad + 60);
+  const x = cv.getContext("2d"), col = colors();
+  x.fillStyle = "#111"; x.fillRect(0, 0, cv.width, cv.height);
+  const g = x.createLinearGradient(0, 0, W, 0); g.addColorStop(0, col.accent); g.addColorStop(1, "#ffffff");
+  x.fillStyle = g; x.font = "700 64px 'Space Grotesk', sans-serif"; x.fillText(r.room, pad*2, 92);
+  x.fillStyle = "rgba(255,255,255,.7)"; x.font = "500 32px 'Space Grotesk', sans-serif";
+  x.fillText(new Date(r.start).toLocaleDateString(undefined, {weekday:"long", month:"long", day:"numeric", year:"numeric"}) + `  ·  ${minsTxt(r.focusMs)} focused  ·  ${r.people.length} people`, pad*2, 134);
+  imgs.forEach((im, i) => {
+    const cx = pad + (i % cols)*(cw + pad), cy = head + Math.floor(i / cols)*(ch + pad);
+    const s2 = Math.max(cw/im.width, ch/im.height), sw = cw/s2, sh = ch/s2;
+    x.save(); x.beginPath(); x.roundRect ? x.roundRect(cx, cy, cw, ch, 18) : x.rect(cx, cy, cw, ch); x.clip();
+    x.drawImage(im, (im.width - sw)/2, (im.height - sh)/2, sw, sh, cx, cy, cw, ch); x.restore();
+  });
+  x.fillStyle = "rgba(255,255,255,.45)"; x.font = "500 26px 'Space Grotesk', sans-serif"; x.fillText("Made with Focus Jams", pad*2, cv.height - 22);
+  const blob = await new Promise(res => cv.toBlob(res, "image/jpeg", .88));
+  return collageCache[r.id] = {blob, count:n, url:URL.createObjectURL(blob)};
+}
+async function sendCollage(conn, nightId){
+  const r = (lastRecap && lastRecap.id === nightId) ? lastRecap : getHist().nights.find(x => x.id === nightId);
+  if(!r) return;
+  const c = await buildCollage(r);
+  if(!c) return;
+  // phones get a lighter copy
+  const im = await createImageBitmap(c.blob), sc = Math.min(1, 1400/im.width), cv = document.createElement("canvas");
+  cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
+  cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+  try{ conn.send({t:"collage", night:nightId, data:cv.toDataURL("image/jpeg", .82)}); }catch(e){}
+}
+// tiny zip writer (no compression; photos are already JPEG)
+function makeZip(files){
+  const crcT = makeZip.t || (makeZip.t = Array.from({length:256}, (_, n) => { let c = n; for(let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; }));
+  const crc = u8 => { let c = 0xFFFFFFFF; for(let i = 0; i < u8.length; i++) c = crcT[(c ^ u8[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  for(const f of files){
+    const name = enc.encode(f.name), data = f.data, c = crc(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+    h.setUint32(14, c, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    parts.push(h, name, data);
+    const ce = new DataView(new ArrayBuffer(46));
+    ce.setUint32(0, 0x02014b50, true); ce.setUint16(4, 20, true); ce.setUint16(6, 20, true); ce.setUint16(8, 0x0800, true);
+    ce.setUint32(16, c, true); ce.setUint32(20, data.length, true); ce.setUint32(24, data.length, true); ce.setUint16(28, name.length, true); ce.setUint32(42, off, true);
+    central.push(ce, name);
+    off += 30 + name.length + data.length;
+  }
+  const csize = central.reduce((a, b) => a + b.byteLength, 0), end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, csize, true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...central, end], {type:"application/zip"});
+}
+function downloadBlob(blob, name){
+  const u = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 8000);
+}
+const fileDate = r => { const d = new Date(r.start); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+async function downloadAlbum(r){
+  const photos = (await nightPhotos(r.id)).sort((a,b) => a.ts - b.ts);
+  if(!photos.length){ gToast("No photos for that night."); return; }
+  const files = [];
+  for(let i = 0; i < photos.length; i++){
+    const ph = photos[i], safe = (ph.name || "photo").replace(/[^\w\- ]+/g, "").trim() || "photo";
+    files.push({name:`${String(i + 1).padStart(3, "0")} - ${safe}.jpg`, data:new Uint8Array(await ph.blob.arrayBuffer())});
+  }
+  const c = await buildCollage(r);
+  if(c) files.unshift({name:"000 - Group collage.jpg", data:new Uint8Array(await c.blob.arrayBuffer())});
+  downloadBlob(makeZip(files), `Focus Jams photos ${fileDate(r)}.zip`);
+}
+
+/* ----- recap (projector) ----- */
+async function showRecap(r){
+  const when = new Date(r.start).toLocaleDateString(undefined, {weekday:"long", month:"long", day:"numeric"}) + " · " +
+    new Date(r.start).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}) + "–" + new Date(r.end).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+  const tile = (v, l) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`;
+  const rows = r.people.map((p, i) => `<tr><td>${i < 3 ? ["🥇","🥈","🥉"][i] : i + 1}</td><td>${p.emoji} ${escH(p.name)}</td><td>${minsTxt(p.focusMs)}</td><td>${p.sessions}</td><td>${p.goalsDone}</td><td>${p.jailVisits}</td></tr>` +
+    (p.goals && p.goals.length ? `<tr><td></td><td colspan="5" class="g">✅ ${p.goals.map(escH).join(" · ")}</td></tr>` : "")).join("");
+  $("recapIn").innerHTML = `
+    <h1>🏁 Tonight's recap</h1><div class="when">${escH(r.room)} · ${when}</div>
+    <div class="tiles">${tile(minsTxt(r.focusMs), "focused")}${tile(r.sessions, "sessions")}${tile(r.people.length, "people")}${tile(r.goalsDone, "goals done")}${tile(r.jailVisits, "phone jail visits")}${tile(r.photos, "photos")}</div>
+    ${r.people.length ? `<table class="lb"><tr><th></th><th>Name</th><th>Focus</th><th>Sessions</th><th>Goals</th><th>📵</th></tr>${rows}</table>` : ""}
+    <div id="recapCollage"></div>
+    <div class="recap-btns" id="recapBtns">
+      <button class="big sm" id="recapClose">Close</button>
+    </div>`;
+  $("recap").classList.add("on"); $("recap").scrollTop = 0;
+  $("recapClose").onclick = () => $("recap").classList.remove("on");
+  if(r.photos){
+    $("recapCollage").innerHTML = `<p class="hint" style="color:#ccc">Making the collage…</p>`;
+    const c = await buildCollage(r);
+    if(c){
+      $("recapCollage").innerHTML = `<img class="collage" src="${c.url}" alt="Group collage">`;
+      const b1 = document.createElement("button"); b1.className = "ghost sm"; b1.textContent = "⬇ Download collage";
+      b1.onclick = () => downloadBlob(c.blob, `Focus Jams collage ${fileDate(r)}.jpg`);
+      const b2 = document.createElement("button"); b2.className = "ghost sm"; b2.textContent = `⬇ Download all ${c.count} photos (.zip)`;
+      b2.onclick = () => downloadAlbum(r);
+      $("recapBtns").prepend(b2); $("recapBtns").prepend(b1);
+    } else $("recapCollage").innerHTML = "";
+  }
+}
+
+/* ----- Customize → Group ----- */
+function renderGroupUI(){
+  if(SYNC) return;
+  ["gGoals","gJail","gStats","gPhotos"].forEach(k => $("s-"+k).checked = S[k]);
+  $("s-roomName").value = S.roomName; $("s-jailGrace").value = String(S.jailGrace);
+  $("nightInfo").textContent = !gOn() ? "Turn on phone sync (Timer tab) and use your GitHub Pages link to use group features."
+    : night ? `Started ${new Date(night.start).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})} · ${Object.keys(people).length} people · ${minsTxt(night.focusMs)} focused · ${night.photos} photos`
+    : "A night starts when the first focus session starts or someone joins.";
+  const h = getHist();
+  $("histNights").innerHTML = h.nights.length ? h.nights.slice(0, 50).map(r => `<div class="hist-row"><div><b>${new Date(r.start).toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"})}</b> · ${escH(r.room)}<br>
+      ${minsTxt(r.focusMs)} focused · ${r.sessions} sessions · ${r.people.length} people · ${r.goalsDone} goals${r.photos ? ` · 📸 ${r.photos}` : ""}</div>
+      <div class="testrow" style="margin:0"><button class="ghost sm" data-recap="${r.id}">View</button>${r.photos ? `<button class="ghost sm" data-album="${r.id}">⬇ Photos</button>` : ""}</div></div>`).join("")
+    : `<p class="hint" style="margin:0">Finished nights show up here.</p>`;
+  const ppl = Object.entries(h.people).sort((a,b) => b[1].focusMs - a[1].focusMs);
+  $("histPeople").innerHTML = ppl.length ? `<table class="ptable"><tr><th>Name</th><th>Nights</th><th>Focus</th><th>Sessions</th><th>Goals</th><th>📵</th></tr>` +
+    ppl.slice(0, 100).map(([id, a]) => `<tr><td>${a.emoji} ${escH(a.name)}</td><td>${a.nights}</td><td>${minsTxt(a.focusMs)}</td><td>${a.sessions}</td><td>${a.goalsDone}</td><td>${a.jailVisits}</td></tr>`).join("") + `</table>`
+    : `<p class="hint" style="margin:0">People who join show up here after the night ends.</p>`;
+}
+["gGoals","gJail","gStats","gPhotos"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); renderCrew(); syncSoon(); });
+$("s-roomName").oninput = e => { S.roomName = e.target.value; save(); };
+$("s-roomName").onchange = () => { if(night) night.room = roomName(); syncSoon(); };
+$("s-jailGrace").onchange = e => { S.jailGrace = +e.target.value; save(); syncSoon(); };
+$("endNightBtn").onclick = () => { $("look").close(); endNight(); };
+$("nightBtn").onclick = () => { if(window.FJ_AUTO_CONFIRM || confirm("End tonight and show the recap? Tonight's stats get saved to history.")) endNight(); };
+$("histNights").onclick = e => {
+  const v = e.target.closest("[data-recap]"), a = e.target.closest("[data-album]");
+  const find = id => getHist().nights.find(x => x.id === id);
+  if(v && find(v.dataset.recap)){ $("look").close(); showRecap(find(v.dataset.recap)); }
+  if(a && find(a.dataset.album)) downloadAlbum(find(a.dataset.album));
+};
+$("histClear").onclick = async () => {
+  if(!(window.FJ_AUTO_CONFIRM || confirm("Delete all room and people history on this computer? (Photos from past nights are deleted too.)"))) return;
+  const keep = night ? night.id : null;
+  try{ const all = await idbDo("readonly", st => st.getAll(), "photos"); for(const ph of all || []) if(ph.night !== keep) await idbDo("readwrite", st => st.delete(ph.id), "photos"); }catch(e){}
+  store.set("fj-hist", null); collageCache = {}; renderGroupUI();
+};
+if(!S.deviceId && !SYNC){ S.deviceId = newCode(); save(); }
+loadNight(); renderCrew();
+
+/* ----- phone side ----- */
+var me = store.get("fj-me");
+if(!me || !me.id){ me = {id:newCode() + newCode(), name:"", emoji:EMOJIS[Math.floor(Math.random()*EMOJIS.length)]}; store.set("fj-me", me); }
+var phG = null, phSendQ = [], phSendT = null, phMyHist = store.get("fj-my-hist") || [], phCollage = {}, phRecapSeen = store.get("fj-recap-seen") || "";
+var wakeLock = null, phPhotoN = 0;
+function phSend(m, allowRelay = true){
+  m = Object.assign({from:me.id, mid:newCode()}, m);
+  if(phConn && phConn.open){ try{ phConn.send(m); return true; }catch(e){} }
+  if(!allowRelay || !SYNC) return false;
+  // relay fallback for small messages, spaced out to respect the relay's limits
+  phSendQ = phSendQ.filter(x => !(x.t === m.t && ["away","ping","hello","goal"].includes(m.t)));   // newest of each kind wins
+  phSendQ.push(m);
+  if(!phSendT) phFlush();
+  return true;
+}
+function phFlush(){
+  const m = phSendQ.shift();
+  if(!m){ phSendT = null; return; }
+  fetch(RELAY() + "/" + relayTopic(SYNC) + "-up", {method:"POST", body:JSON.stringify(m)}).catch(() => {});
+  phSendT = setTimeout(phFlush, 2500);
+}
+function phHello(){ if(me.name) phSend({t:"hello", name:me.name, emoji:me.emoji, away:document.hidden}); }
+function phGroupRender(g){
+  phG = g;
+  const show = !!g;
+  const editing = $("phNameBox").dataset.editing === "1";
+  $("phMe").hidden = !show || !me.name || editing;
+  $("phNameBox").hidden = !show || (!!me.name && !editing);
+  if(show && !me.name && $("phNameBox").dataset.init !== "1") phOpenName();
+  phRenderHist();
+  if(!show) return;
+  const mine = (g.ppl || []).find(p => p.id === me.id);
+  $("phMeName").textContent = `${me.emoji} ${me.name}`;
+  // goals
+  $("phGoalBox").hidden = !g.f.goals;
+  const hasGoal = mine && mine.g && !mine.d;
+  $("phGoalSet").hidden = !!hasGoal; $("phGoalShow").hidden = !hasGoal;
+  if(hasGoal) $("phGoalTxt").textContent = "🎯 " + mine.g;
+  if(mine && mine.d && mine.g && $("phGoalIn").value === "") $("phGoalIn").placeholder = "Nice! What's next?";
+  // stats
+  $("phStats").hidden = !(g.f.stats && mine);
+  if(mine) $("phStats").textContent = `Tonight: ${mine.m} min focused · ${mine.s} session${mine.s === 1 ? "" : "s"}${mine.gd ? ` · ${mine.gd} goal${mine.gd === 1 ? "" : "s"} done` : ""}`;
+  // phone jail
+  $("phJail").hidden = !g.f.jail;
+  if(g.f.jail) $("phJail").innerHTML = mine && mine.j ? "📵 <b>You're in phone jail!</b> Stay on this page to get out."
+    : `📵 Phone jail is on: during focus, leaving this page for more than ${g.grace}s puts your name on the big screen. Put your phone face down instead of locking it.` + (mine && mine.v ? ` (Visits tonight: ${mine.v})` : "");
+  phWake(g.f.jail);
+  // photos
+  $("phPhotoBox").hidden = !g.f.photos;
+  // recap
+  phShowRecap(g.recap);
+}
+function phOpenName(){
+  $("phNameBox").dataset.init = "1"; $("phNameBox").dataset.editing = "1"; $("phNameBox").hidden = false; $("phMe").hidden = true;
+  $("phNameIn").value = me.name || "";
+  $("phEmojis").innerHTML = EMOJIS.map(e => `<button class="${e === me.emoji ? "on" : ""}" data-e="${e}">${e}</button>`).join("");
+}
+function phSaveName(){
+  const n = clean($("phNameIn").value, 24);
+  if(!n){ $("phNameIn").focus(); return; }
+  me.name = n; store.set("fj-me", me);
+  $("phNameBox").dataset.editing = "0"; $("phNameBox").hidden = true;
+  phHello(); phGroupRender(phG);
+}
+function phRenderHist(){
+  $("phHistBox").hidden = !phMyHist.length;
+  $("phHist").innerHTML = phMyHist.slice(0, 60).map(h => `<div><b>${new Date(h.start).toLocaleDateString(undefined, {month:"short", day:"numeric"})}</b> · ${escH(h.room)}: ${minsTxt(h.focusMs)} focused, ${h.sessions} session${h.sessions === 1 ? "" : "s"}${h.goalsDone ? `, ${h.goalsDone} goal${h.goalsDone === 1 ? "" : "s"}` : ""}${h.goals && h.goals.length ? `<br><span style="opacity:.8">✅ ${h.goals.map(escH).join(" · ")}</span>` : ""}</div>`).join("")
+    + (phMyHist.length ? `<div style="margin-top:6px">All time: ${minsTxt(phMyHist.reduce((a,h) => a + h.focusMs, 0))} focused over ${phMyHist.length} night${phMyHist.length === 1 ? "" : "s"}</div>` : "");
+}
+function phShowRecap(r){
+  if(!r){ $("phRecap").hidden = true; return; }
+  const mine = (r.people || []).find(p => p.id === me.id);
+  // save it to my personal history once
+  if(mine && !phMyHist.some(h => h.id === r.id)){
+    phMyHist.unshift({id:r.id, room:r.room, start:r.start, focusMs:mine.focusMs, sessions:mine.sessions, goalsDone:mine.goalsDone, goals:mine.goals || [], jailVisits:mine.jailVisits});
+    phMyHist = phMyHist.slice(0, 200); store.set("fj-my-hist", phMyHist); phRenderHist();
+  }
+  if(phRecapSeen === r.id){ $("phRecap").hidden = true; return; }
+  $("phRecap").hidden = false;
+  const rank = mine ? r.people.indexOf(mine) + 1 : 0;
+  $("phRecap").innerHTML = `<b style="font-size:18px">🏁 Tonight's recap</b>
+    <div class="ph-stat">${escH(r.room)}: ${minsTxt(r.focusMs)} focused · ${r.sessions} sessions · ${r.people.length} people · ${r.goalsDone} goals</div>
+    ${mine ? `<div class="ph-goal">You: ${minsTxt(mine.focusMs)} focused${rank ? ` (#${rank})` : ""}, ${mine.sessions} sessions, ${mine.goalsDone} goals</div>` : ""}
+    ${r.photos ? (phCollage[r.id] ? `<img src="${phCollage[r.id]}" alt="Group collage"><a class="big sm btnlink" style="display:block;text-align:center;margin-top:8px;color:var(--accent-ink)" href="${phCollage[r.id]}" download="Focus Jams collage.jpg">⬇ Save the collage</a>`
+      : `<div class="hint" style="margin-top:8px" id="phCollMsg">${phConn && phConn.open ? "Loading the group collage…" : "The group collage needs a direct connection (same Wi-Fi works best)."}</div>`) : ""}
+    <div class="testrow"><button class="ghost sm" id="phRecapHide">Hide</button></div>`;
+  $("phRecapHide").onclick = () => { phRecapSeen = r.id; store.set("fj-recap-seen", r.id); $("phRecap").hidden = true; };
+  if(r.photos && !phCollage[r.id] && phConn && phConn.open && !phCollage["asked" + r.id]){ phCollage["asked" + r.id] = 1; phSend({t:"getCollage", night:r.id}, false); }
+}
+async function phWake(want){
+  try{
+    if(want && !document.hidden && !wakeLock && navigator.wakeLock){ wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); }
+    else if(!want && wakeLock){ await wakeLock.release(); wakeLock = null; }
+  }catch(e){}
+}
+async function phCompress(file){
+  const im = await createImageBitmap(file).catch(() => null);
+  if(!im) return null;
+  const sc = Math.min(1, 1600 / Math.max(im.width, im.height)), cv = document.createElement("canvas");
+  cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
+  cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+  return cv.toDataURL("image/jpeg", .82);
+}
+async function phSendPhotos(files){
+  const msg = t => $("phPhotoMsg").textContent = t;
+  if(!(phConn && phConn.open)){ msg("Photos need a direct connection to the big screen. Try the same Wi-Fi as the projector, then reload."); return; }
+  let sent = 0;
+  for(const f of files){
+    msg(`Sending ${sent + 1} of ${files.length}…`);
+    const data = await phCompress(f);
+    if(!data){ continue; }
+    if(!phSend({t:"photo", pid:me.id.slice(0, 8) + newCode(), data}, false)){ msg("Lost the connection. Try again in a moment."); return; }
+    sent++; phPhotoN++;
+    await sleep(400);
+  }
+  msg(sent ? `📸 Added ${sent} photo${sent === 1 ? "" : "s"} (${phPhotoN} from you tonight).` : "Couldn't read those photos.");
+}
+function phMsg(d){   // non-state messages from the projector
+  if(d && d.t === "collage" && d.night){
+    phCollage[d.night] = d.data;
+    if(phG && phG.recap && phG.recap.id === d.night && phRecapSeen !== d.night) phShowRecap(phG.recap);
+  }
+}
+if(SYNC){
+  $("phNameSave").onclick = phSaveName;
+  $("phNameIn").onkeydown = e => { if(e.key === "Enter") phSaveName(); };
+  $("phEmojis").onclick = e => { const b = e.target.closest("[data-e]"); if(!b) return; me.emoji = b.dataset.e; store.set("fj-me", me); document.querySelectorAll("#phEmojis button").forEach(x => x.classList.toggle("on", x === b)); };
+  $("phRename").onclick = phOpenName;
+  const setGoal = () => { const t = clean($("phGoalIn").value, 60); if(!t) return; phSend({t:"goal", text:t}); $("phGoalIn").value = "";
+    // show it right away; the projector confirms with the next update
+    if(phG){ const mine = (phG.ppl || []).find(p => p.id === me.id); if(mine){ mine.g = t; mine.d = false; } else (phG.ppl = phG.ppl || []).push({id:me.id, g:t, d:false, m:0, s:0, gd:0, v:0}); phGroupRender(phG); } };
+  $("phGoalSave").onclick = setGoal;
+  $("phGoalIn").onkeydown = e => { if(e.key === "Enter") setGoal(); };
+  $("phGoalDone").onclick = () => { phSend({t:"done"}); if(navigator.vibrate) navigator.vibrate(80);
+    if(phG){ const mine = (phG.ppl || []).find(p => p.id === me.id); if(mine){ mine.d = true; mine.gd = (mine.gd || 0) + 1; } phGroupRender(phG); } };
+  $("phGoalNew").onclick = () => { $("phGoalSet").hidden = false; $("phGoalShow").hidden = true; $("phGoalIn").focus(); };
+  $("phPhotoIn").onchange = e => { phSendPhotos(Array.from(e.target.files || [])); e.target.value = ""; };
+  // phone jail: tell the projector when this page is hidden or shown
+  document.addEventListener("visibilitychange", () => {
+    if(me.name && phG) phSend({t:"away", away:document.hidden});
+    if(!document.hidden && phG) phWake(phG.f.jail);
+  });
+  addEventListener("pagehide", () => { if(me.name) phSend({t:"bye"}, false); });
+  // keep relay-only phones counted as "here"
+  setInterval(() => { if(me.name && phG && !(phConn && phConn.open)) phSend({t:"ping"}); }, 25000);
+}
 
 /* ================= start up ================= */
 (async function init(){
