@@ -27,6 +27,8 @@
   body.viz .ringbox{transition:transform .08s linear}
   .vizbadge{display:none;z-index:5;position:fixed;left:50%;bottom:2.4vh;transform:translateX(-50%);font:700 clamp(14px,1.3vw,24px) "Space Grotesk",system-ui,sans-serif;letter-spacing:.3em;text-transform:uppercase;color:#fff;text-shadow:0 0 18px var(--accent),0 0 4px #000;pointer-events:none}
   body.viz.vizprev .vizbadge{display:block}
+  .viztoast{position:fixed;left:50%;top:14vh;transform:translateX(-50%);z-index:7;background:rgba(0,0,0,.72);color:#fff;font:700 clamp(15px,1.4vw,26px) "Space Grotesk",system-ui,sans-serif;padding:.6em 1.1em;border-radius:14px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+  .viztoast.on{opacity:1}
   .vizconnect{display:none;position:fixed;left:0;right:0;bottom:16vh;margin:0 auto;width:max-content;max-width:90vw;z-index:6;box-shadow:0 10px 40px -8px var(--accent),0 0 0 4px rgba(0,0,0,.35) !important;font-size:clamp(15px,1.3vw,24px) !important;padding:.9em 1.4em !important}
   body.viz.needsound .vizconnect{display:block}
   body.viz.needsound.idle .vizconnect{display:block;opacity:1;cursor:pointer}
@@ -243,7 +245,7 @@
 </style>
 </head>
 <body>
-<div id="bg"></div><div id="dim"></div><canvas id="viz"></canvas><div class="vizbadge" id="vizBadge">☕ Break time</div><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button>
+<div id="bg"></div><div id="dim"></div><canvas id="viz"></canvas><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button>
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
@@ -499,6 +501,11 @@
         <label>Intensity<select id="s-vizLevel"><option value="chill">Chill</option><option value="party">Party</option><option value="rave">Rave</option></select></label>
         <label>React to<select id="s-vizSrc"><option value="system">The computer's sound (best)</option><option value="mic">A microphone or input</option><option value="beat">A steady beat (tap T)</option></select></label>
       </div>
+      <div class="sliders" style="grid-template-columns:1fr 1fr">
+        <label>Sensitivity: <span id="vizSensVal"></span><input type="range" id="s-vizSens" min="0" max="100"></label>
+        <label>Decay (how long the lights linger): <span id="vizDecayVal"></span><input type="range" id="s-vizDecay" min="0" max="100"></label>
+      </div>
+      <p class="hint" style="margin-top:6px">Everything maxed out? Lower the sensitivity. During a break or preview, use the <b>↑ ↓</b> arrow keys for sensitivity and <b>← →</b> for decay while you watch.</p>
       <div class="sounds" id="vizDevRow" hidden>
         <label style="grid-column:1 / -1">Microphone or input<select id="s-vizDev"><option value="">Default microphone</option></select></label>
       </div>
@@ -633,7 +640,7 @@ const MODE_IDX = {focus:0, short:1, long:2};
 const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              focusSound:"chime", breakSound:"bell", volume:70, repeat:1, jamLink:"",
              clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
-             viz:true, vizLevel:"party", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"",
+             viz:true, vizLevel:"party", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -1428,6 +1435,10 @@ document.addEventListener("keydown", e => {
   else if(e.key === "s" || e.key === "S") $("skip").click();
   else if(e.key === "f" || e.key === "F") toggleStage();
   else if(e.key === "v" || e.key === "V") vizTogglePreview();
+  else if(vizOn && e.key === "ArrowUp"){ e.preventDefault(); vizNudge("vizSens", 5); }
+  else if(vizOn && e.key === "ArrowDown"){ e.preventDefault(); vizNudge("vizSens", -5); }
+  else if(vizOn && e.key === "ArrowRight"){ e.preventDefault(); vizNudge("vizDecay", 5); }
+  else if(vizOn && e.key === "ArrowLeft"){ e.preventDefault(); vizNudge("vizDecay", -5); }
   else if(e.key === "t" || e.key === "T") vizTap();
 });
 document.addEventListener("visibilitychange", () => { if(!document.hidden && S.src === "app" && auth && Date.now() - lastPoll > 4000) poll(); });
@@ -1798,10 +1809,16 @@ function $$ringReset(){ const rb = document.querySelector(".wrap .ringbox"); if(
 function vizTogglePreview(){ vizPreview = !vizPreview; vizUpdate(); }
 
 // Returns {bands:[0..1]x64, bass, mid, high, beat:true/false}
+var vizDisp = null, vizLastT = 0;
 function vizAudio(now){
   const N = 64, bands = new Array(N).fill(0);
   let bass = 0, mid = 0, high = 0, beat = false;
+  const sens = (S.vizSens ?? 35)/100, decay = (S.vizDecay ?? 50)/100;
   if(vizAnalyser && !vizMicFailed && S.vizSrc !== "beat"){
+    // Sensitivity moves the loudness window the bars cover: low = only loud sounds reach the top.
+    const maxDb = Math.round(14 - sens*66);   // 0 → +14 dB (almost nothing maxes out) … 100 → -52 dB (very sensitive)
+    if(vizAnalyser.maxDecibels !== maxDb){ vizAnalyser.minDecibels = -200; vizAnalyser.maxDecibels = maxDb; vizAnalyser.minDecibels = maxDb - 62; }
+    vizAnalyser.smoothingTimeConstant = .45 + decay*.45;
     vizAnalyser.getByteFrequencyData(vizFreq);
     // log-spaced bands from ~40 Hz to ~14 kHz
     const nyq = actx.sampleRate/2, bins = vizFreq.length;
@@ -1826,8 +1843,18 @@ function vizAudio(now){
       const x = i/N;
       bands[i] = Math.max(0, Math.min(1, kick*(1-x)*.95 + .22 + .18*Math.sin(t*3.1 + i*.45) * Math.sin(t*1.3 + i*.13) + .1*Math.sin(t*7 + i) - x*.25));
     }
-    bass = kick*.9 + .1; mid = .35 + .15*Math.sin(t*2); high = .25 + .1*Math.sin(t*5);
+    const g = .35 + sens*1.3;   // sensitivity scales the synthetic levels too
+    for(let i = 0; i < N; i++) bands[i] = Math.min(1, bands[i]*g);
   }
+  // Decay: bars jump up instantly but fall back at a set speed (slow = lingering lights).
+  const dt = Math.min(.1, Math.max(0, (now - (vizLastT || now))/1000)); vizLastT = now;
+  const fall = 5*Math.pow(.06, decay);   // per second: 5 (snappy) down to 0.3 (slow)
+  if(!vizDisp || vizDisp.length !== N) vizDisp = new Array(N).fill(0);
+  for(let i = 0; i < N; i++){ vizDisp[i] = Math.max(bands[i], vizDisp[i] - fall*dt); bands[i] = vizDisp[i]; }
+  // display levels come from the smoothed bars (the beat above used the raw signal)
+  bass = (bands[0]+bands[1]+bands[2]+bands[3]+bands[4]+bands[5])/6;
+  mid = bands.slice(16, 40).reduce((a,b) => a+b, 0)/24;
+  high = bands.slice(40).reduce((a,b) => a+b, 0)/24;
   return {bands, bass, mid, high, beat};
 }
 
@@ -1836,7 +1863,7 @@ function vizFrame(now){
   vizRaf = requestAnimationFrame(vizFrame);
   const L = VIZ_LEVEL[S.vizLevel] || VIZ_LEVEL.party, a = vizAudio(now), c = vizCtx, W = vizW, H = vizH;
   if(a.beat){ vizBeat = 1; if(S.vizStrobe && S.vizLevel !== "chill" && now - vizLastFlash > 340){ vizFlash = 1; vizLastFlash = now; } }   // never more than ~3 flashes a second
-  vizBeat *= .9; vizFlash *= .78;
+  vizBeat *= .8 + (S.vizDecay ?? 50)/100*.17; vizFlash *= .78;   // beat pulses linger longer with more decay
   vizHue = (vizHue + .25*L.speed + a.high*1.5*L.speed) % 360;
   const acc = colors().accent, hue = vizHue;
 
@@ -1923,6 +1950,7 @@ const VIZ_HOW = {
   beat: "No audio needed: the lights pulse at a steady tempo. Press T a few times in time with the music to match it."
 };
 function renderVizUI(){
+  $("s-vizSens").value = S.vizSens; $("s-vizDecay").value = S.vizDecay; vizSliderLabels();
   $("s-viz").checked = S.viz; $("s-vizLevel").value = S.vizLevel; $("s-vizSrc").value = S.vizSrc; $("s-vizStrobe").checked = S.vizStrobe;
   $("vizMic").hidden = S.vizSrc !== "mic";
   $("vizSys").hidden = S.vizSrc !== "system";
@@ -1934,6 +1962,17 @@ function renderVizUI(){
 }
 $("s-viz").onchange = e => { S.viz = e.target.checked; save(); vizUpdate(); };
 $("s-vizLevel").onchange = e => { S.vizLevel = e.target.value; save(); };
+function vizSliderLabels(){ $("vizSensVal").textContent = S.vizSens; $("vizDecayVal").textContent = S.vizDecay; }
+["vizSens","vizDecay"].forEach(k => {
+  $("s-"+k).oninput = e => { S[k] = +e.target.value; vizSliderLabels(); };
+  $("s-"+k).onchange = save;
+});
+var vizToastT = null;
+function vizToast(t){ const el = $("vizToast"); el.textContent = t; el.classList.add("on"); clearTimeout(vizToastT); vizToastT = setTimeout(() => el.classList.remove("on"), 1200); }
+function vizNudge(k, d){
+  S[k] = Math.max(0, Math.min(100, S[k] + d)); save();
+  vizToast((k === "vizSens" ? "Sensitivity " : "Decay ") + S[k]);
+}
 $("s-vizStrobe").onchange = e => { S.vizStrobe = e.target.checked; save(); };
 $("s-vizSrc").onchange = e => {
   S.vizSrc = e.target.value; save(); vizMsg("");
