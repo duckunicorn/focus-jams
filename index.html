@@ -848,6 +848,15 @@
       </div>
       <p class="hint">Phone jail: phones can't tell switching apps apart from locking the screen, so while it's on, the Focus Jams page keeps phone screens awake. Tell people to put their phone face down instead of locking it.</p>
 
+      <h3>Sounds on the big screen</h3>
+      <div class="sounds" style="margin-top:0">
+        <label>📵 Someone goes to phone jail<select id="s-sndJailIn"></select></label>
+        <label>🔓 Someone gets out of phone jail<select id="s-sndJailOut"></select></label>
+        <label>🎉 Someone finishes a goal<select id="s-sndGoal"></select></label>
+        <label>&nbsp;<span class="testrow" style="margin:0"><button class="ghost sm" data-gtest="sndJailIn">▶ Jail</button><button class="ghost sm" data-gtest="sndJailOut">▶ Out</button><button class="ghost sm" data-gtest="sndGoal">▶ Goal</button></span></label>
+      </div>
+      <p class="hint">They use the volume from the Timer tab. Upload your own sounds there, and they show up in these lists too.</p>
+
       <h3>Tonight</h3>
       <div class="testrow" style="margin-top:0">
         <button class="big sm" id="endNightBtn">🏁 End tonight &amp; show the recap</button>
@@ -985,6 +994,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
              viz:true, vizLevel:"party", vizColors:"rainbow", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
              vizStopAtEnd:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
+             sndJailIn:"siren", sndJailOut:"unlock", sndGoal:"fanfare",
              fadeMusic:true, fadeSecs:4,
              gGoals:true, gJail:true, gStats:true, gPhotos:true, jailGrace:20, roomName:"", deviceId:"", syncServer:"",
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
@@ -1271,6 +1281,11 @@ const SOUNDS = {
   digital: {name:"Digital alarm",   len:1.5, play:(o,t)=>{ for(let k=0;k<2;k++) for(let i=0;i<4;i++) tone(o,1046.5,t+k*.8+i*.12,.08,"square",.16,.003); }},
   arcade:  {name:"Arcade level-up", len:.7,  play:(o,t)=>[523.25,659.25,783.99,1046.5,1318.5].forEach((f,i)=>tone(o,f,t+i*.09,.18,"square",.15,.003))},
   gong:    {name:"Gong",            len:3.8, play:(o,t)=>[[98,.5],[200,.25],[290,.15],[415,.08]].forEach(([f,p])=>tone(o,f,t,3.8,"sine",p,.02))},
+  siren:   {name:"Siren",           len:1.1, play:(o,t)=>{ for(let i = 0; i < 4; i++) tone(o, i % 2 ? 620 : 880, t + i*.26, .24, "triangle", .32, .01); }},
+  unlock:  {name:"Unlock",          len:.7,  play:(o,t)=>{ tone(o,2400,t,.03,"square",.08,.002); [784,1046.5,1318.5,1568].forEach((f,i)=>tone(o,f,t+.05+i*.07,.3,"sine",.32,.005)); }},
+  fanfare: {name:"Fanfare",         len:1.3, play:(o,t)=>{ [523.25,659.25,783.99].forEach((f,i)=>tone(o,f,t+i*.11,.14,"square",.13,.005));
+                                                         [523.25,659.25,783.99,1046.5].forEach(f=>{ tone(o,f,t+.36,.95,"square",.09,.01); tone(o,f*2,t+.36,.6,"sine",.05,.01); }); }},
+  wahwah:  {name:"Sad horn",        len:2.2, play:(o,t)=>[392,370,349.2].forEach((f,i)=>tone(o,f,t+i*.42,.4,"sawtooth",.13,.03)) || tone(o,329.6,t+1.26,.95,"sawtooth",.13,.03)},
   none:    {name:"No sound",        len:0,   play:()=>{}},
 };
 // Plays a sound now, or at a future audio-clock time. Returns its output node so it can be cancelled.
@@ -1395,6 +1410,10 @@ function renderSoundUI(){
   const mine = Object.values(customSounds);
   let opts = `<optgroup label="Built-in">` + Object.entries(SOUNDS).map(([k,s]) => `<option value="${k}">${s.name}</option>`).join("") + `</optgroup>`;
   if(mine.length) opts += `<optgroup label="Your sounds">` + mine.map(c => `<option value="custom:${c.id}">🎵 ${esc(c.name)}</option>`).join("") + `</optgroup>`;
+  ["sndJailIn","sndJailOut","sndGoal"].forEach(k => {
+    if(S[k].startsWith("custom:") && !customSounds[S[k].slice(7)] && customLoaded) S[k] = DEF[k];
+    $("s-"+k).innerHTML = opts; $("s-"+k).value = S[k];
+  });
   ["focusSound","breakSound"].forEach(k => {
     // a saved custom sound that no longer exists falls back to the default
     if(S[k].startsWith("custom:") && !customSounds[S[k].slice(7)] && customLoaded) S[k] = DEF[k];
@@ -1794,6 +1813,8 @@ renderSoundUI();
 ["focusSound","breakSound"].forEach(k => $("s-"+k).onchange = e => {
   S[k] = e.target.value; save(); unlockAudio(); playSound(S[k], undefined, 1); scheduleEndSound(); renderSoundUI();
 });
+["sndJailIn","sndJailOut","sndGoal"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.value; save(); unlockAudio(); playSound(S[k], undefined, 1); });
+document.addEventListener("click", e => { const b = e.target.closest("[data-gtest]"); if(b){ unlockAudio(); playSound(S[b.dataset.gtest], undefined, 1); } });
 $("sndFileFocus").onchange = e => { addCustomSound(e.target.files[0], "focus"); e.target.value = ""; };
 $("sndFileBreak").onchange = e => { addCustomSound(e.target.files[0], "break"); e.target.value = ""; };
 $("sndList").oninput = e => {
@@ -3060,7 +3081,7 @@ function groupMsg(m, conn){
     case "done":
       if(!S.gGoals || !p.goal || p.goalDone) return;
       p.goalDone = true; p.goalsDone++; p.goalsList.push(p.goal); night.goalsDone++;
-      celebrate(`🎉 ${p.emoji} ${escH(p.name)} finished: ${escH(p.goal)}`);
+      celebrate(`🎉 ${p.emoji} ${escH(p.name)} finished: ${escH(p.goal)}`); groupSound("sndGoal");
       break;
     case "away": setAway(p, !!m.away); break;
     case "down": p.down = !!m.down; break;
@@ -3075,7 +3096,7 @@ function setAway(p, away){
   if(away && !p.away){ p.away = true; p.awaySince = Date.now(); }
   else if(!away && p.away){
     p.away = false;
-    if(p.jailed){ p.jailed = false; gToast(`🔓 ${p.emoji} ${escH(p.name)} is out of phone jail`); }
+    if(p.jailed){ p.jailed = false; gToast(`🔓 ${p.emoji} ${escH(p.name)} is out of phone jail`); groupSound("sndJailOut"); }
   }
 }
 // a phone that reconnects gets a new connection; close its old ones so it's only counted once
@@ -3104,7 +3125,7 @@ function groupSecond(){
     if(!isOnline(p) && p.away && now - p.lastSeen > 15*60000){ p.away = false; if(p.jailed){ p.jailed = false; changed = true; } }
     if(focusing && isOnline(p) && !p.away) p.focusMs += dt;
     if(S.gJail && focusing && p.away && !p.jailed && now - p.awaySince > S.jailGrace*1000){
-      p.jailed = true; p.jailVisits++; night.jailVisits++; changed = true;
+      p.jailed = true; p.jailVisits++; night.jailVisits++; changed = true; groupSound("sndJailIn");
       gToast(`📵 ${p.emoji} ${escH(p.name)} went to phone jail`);
     }
     if(p.jailed && (!focusing || !S.gJail)){ p.jailed = false; changed = true; }   // breaks are free time
@@ -3128,6 +3149,14 @@ function groupSecond(){
     };
   }catch(e){}
 })();
+// short sound on the projector for group moments; spaced out so a burst of events isn't a pile-up of noise
+var gSoundAt = 0;
+function groupSound(k){
+  const name = S[k];
+  if(!name || name === "none" || Date.now() - gSoundAt < 1200) return;
+  gSoundAt = Date.now();
+  unlockAudio(); playSound(name, undefined, 1);
+}
 function groupSessionDone(){
   if(!night) return;
   night.sessions++;
