@@ -1449,15 +1449,30 @@ async function startHost(){
     c.on("close", () => { conns.delete(c); renderSyncBox(); });
     c.on("error", () => { conns.delete(c); renderSyncBox(); });
   });
-  p.on("disconnected", () => { if(p === peer && !p.destroyed){ syncReady = false; renderSyncBox(); setTimeout(() => { try{ p.reconnect(); }catch(e){} }, 2000); } });
+  // Losing the matchmaking server does NOT affect phones that are already connected (they talk to us
+  // directly), so just quietly reconnect to it in the background and leave existing phones alone.
+  const reconnectSignal = () => {
+    clearTimeout(peerRetry);
+    peerRetry = setTimeout(() => {
+      if(p !== peer || p.destroyed) return;
+      if(p.disconnected){ try{ p.reconnect(); }catch(e){} reconnectSignal(); }
+    }, 3000);
+  };
+  p.on("disconnected", () => { if(p === peer && !p.destroyed) reconnectSignal(); });
   p.on("error", e => {
     if(p !== peer) return;
-    syncReady = false; renderSyncBox();
-    // "unavailable-id" usually means this page is open in another tab; try again shortly
-    if(["unavailable-id","network","server-error","socket-error","socket-closed"].includes(e.type)){
-      $("syncCount").textContent = e.type === "unavailable-id" ? "Open in another tab? Retrying…" : "Reconnecting…";
+    if(e.type === "unavailable-id"){
+      // usually this page is open in another tab; try again shortly
+      syncReady = false; renderSyncBox();
+      $("syncCount").textContent = "Open in another tab? Retrying…";
       clearTimeout(peerRetry); peerRetry = setTimeout(startHost, 8000);
+    } else if(p.destroyed){
+      // only rebuild from scratch if the whole peer died
+      clearTimeout(peerRetry); peerRetry = setTimeout(startHost, 5000);
+    } else if(p.disconnected){
+      reconnectSignal();
     }
+    // anything else (e.g. one phone's connection failing) is handled per connection
   });
 }
 setInterval(broadcast, 10000);   // heartbeat keeps phones' clocks lined up
@@ -1501,25 +1516,42 @@ async function startPhone(){
   setInterval(phTick, 250);
   $("phLyr").onclick = () => { curTrack = phState.song; fillLyrics(); $("lyr").showModal(); };
   try{ await loadPeerJs(); }catch(e){ phSetStatus("Couldn't load — refresh", false); return; }
+  // Status only says "Reconnecting" if we've been without the screen for a few seconds, so brief blips don't flicker.
+  let downSince = 0, lastData = 0;
+  const isLive = () => !!(phConn && phConn.open) && Date.now() - lastData < 30000;
+  setInterval(() => {
+    if(isLive()){ downSince = 0; phSetStatus("Live", true); return; }
+    if(!downSince) downSince = Date.now();
+    if(Date.now() - downSince > 5000) phSetStatus(phOffline ? "Big screen is offline — retrying…" : "Reconnecting…", false);
+    // connection open but silent for 30s (the screen sends an update every 10s): it's dead, replace it
+    if(phConn && phConn.open && Date.now() - lastData > 30000){ try{ phConn.close(); }catch(e){} phConn = null; connect(); }
+  }, 1000);
+  let phOffline = false;
+  const retry = ms => { clearTimeout(phRetry); phRetry = setTimeout(connect, ms); };
   const connect = () => {
     clearTimeout(phRetry);
+    if(phConn && phConn.open) return;              // never replace a working connection
     if(!phPeer || phPeer.destroyed){
       phPeer = new Peer(peerOpts());
-      phPeer.on("open", connect);
+      phPeer.on("open", () => { if(!(phConn && phConn.open)) connect(); });
+      phPeer.on("disconnected", () => setTimeout(() => { if(phPeer && phPeer.disconnected && !phPeer.destroyed) try{ phPeer.reconnect(); }catch(e){} }, 2000));
       phPeer.on("error", e => {
-        phSetStatus(e.type === "peer-unavailable" ? "Big screen is offline — retrying…" : "Reconnecting…", false);
-        phRetry = setTimeout(connect, 4000);
+        if(e.type === "peer-unavailable"){ phOffline = true; retry(5000); }
+        else if(phPeer.destroyed){ phPeer = null; retry(4000); }
+        else if(!(phConn && phConn.open)) retry(4000);
+        // matchmaking-server hiccups don't matter while our direct connection is up
       });
-      phPeer.on("disconnected", () => { try{ phPeer.reconnect(); }catch(e){} });
       return;
     }
-    if(!phPeer.open) return;
-    if(phConn) try{ phConn.close(); }catch(e){}
+    if(!phPeer.open) return;                        // waiting for the matchmaking server; "open" will call us
     const c = phConn = phPeer.connect(PEER_PREFIX + SYNC, {reliable:true});
-    c.on("open", () => phSetStatus("Live", true));
-    c.on("data", phApply);
-    c.on("close", () => { if(c !== phConn) return; phSetStatus("Reconnecting…", false); phRetry = setTimeout(connect, 3000); });
-    c.on("error", () => { if(c !== phConn) return; phSetStatus("Reconnecting…", false); phRetry = setTimeout(connect, 3000); });
+    c.on("open", () => { if(c !== phConn) return; phOffline = false; lastData = Date.now(); });
+    c.on("data", d => { if(c !== phConn) return; lastData = Date.now(); phApply(d); });
+    const lost = () => { if(c !== phConn) return; phConn = null; retry(2000); };
+    c.on("close", lost);
+    c.on("error", lost);
+    // if it hasn't opened after 15s, try again
+    setTimeout(() => { if(c === phConn && !c.open){ try{ c.close(); }catch(e){} phConn = null; connect(); } }, 15000);
   };
   connect();
   // phones drop connections when the screen locks; reconnect when it wakes
