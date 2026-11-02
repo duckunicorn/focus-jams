@@ -1,6 +1,7 @@
-# Focus Jams sync server (Cloudflare Workers, free plan)
-name = "focus-jams-relay"
-main = "worker.js"
+# Focus Jams sync server (Cloudflare Workers, free plan). The code is in relay/.
+# This file sits at the top of the repository so Cloudflare's "Import a repository" works with its default settings.
+name = "focus-jams"
+main = "relay/worker.js"
 compatibility_date = "2025-06-01"
 
 [[durable_objects.bindings]]

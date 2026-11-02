@@ -8,13 +8,11 @@ worry about. It runs on Cloudflare Workers' free plan (one "room" per projector,
 1. Make a free account at <https://dash.cloudflare.com/sign-up>.
 2. In the dashboard, go to **Workers & Pages** → **Create** → **Import a repository**.
 3. Connect your GitHub account and pick the **focus-jams** repository.
-4. On the setup screen:
-   - **Project name:** `focus-jams-relay` (it has to match the name in `wrangler.toml`)
-   - **Root directory / path:** `relay`
+4. On the setup screen, keep the defaults:
+   - **Project name:** `focus-jams` (it has to match the name in the `wrangler.toml` at the top of the repository)
    - **Build command:** leave empty
-   - **Deploy command:** `npx wrangler deploy` (the default)
 5. Click **Deploy**. When it finishes, it shows your server's address, something like
-   `focus-jams-relay.yourname.workers.dev`.
+   `focus-jams.yourname.workers.dev`.
 6. Open Focus Jams on the projector → **Customize** → **👥 Group** → **Your sync server**, paste the address,
    and click **Test**. You should see "✅ Your sync server is working."
 7. Everyone scans the QR code again (it now includes the server's address).
@@ -29,4 +27,4 @@ without counting, and the room sleeps between messages), so a study group won't 
 ## Files
 
 - `worker.js`: the server
-- `wrangler.toml`: Cloudflare settings (name, the Durable Object "room", free-plan storage type)
+- `../wrangler.toml` (top of the repository): Cloudflare settings (name, the Durable Object "room", free-plan storage type)
