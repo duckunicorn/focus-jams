@@ -134,9 +134,9 @@
   body.stage .jam-row b{font-size:clamp(16px,1.6vw,32px)}
   body.stage .jam-row .hint{display:block}
   /* controls fade away when the mouse sits still */
-  body.stage .hdr-r,body.stage .sync-row button,body.stage .controls,body.stage .lyrBtn,body.stage .tabs,body.stage .np-ctrl,body.stage #jamEmpty,body.stage .jam-row button,body.stage .chips{transition:opacity .4s}
+  body.stage .hdr-r,body.stage #boothRow,body.stage .sync-row button,body.stage .controls,body.stage .lyrBtn,body.stage .tabs,body.stage .np-ctrl,body.stage #jamEmpty,body.stage .jam-row button,body.stage .chips{transition:opacity .4s}
   body.stage.idle{cursor:none}
-  body.stage.idle .hdr-r,body.stage.idle .sync-row button,body.stage.idle .controls,body.stage.idle .lyrBtn,body.stage.idle .tabs,body.stage.idle .np-ctrl,body.stage.idle #jamEmpty,body.stage.idle .jam-row button,body.stage.idle .chips{opacity:0;pointer-events:none}
+  body.stage.idle .hdr-r,body.stage.idle #boothRow,body.stage.idle .sync-row button,body.stage.idle .controls,body.stage.idle .lyrBtn,body.stage.idle .tabs,body.stage.idle .np-ctrl,body.stage.idle #jamEmpty,body.stage.idle .jam-row button,body.stage.idle .chips{opacity:0;pointer-events:none}
   @media (max-width:820px){ body.stage .grid{grid-template-columns:1fr} body.stage .ringbox{width:min(70vw,50vh)} }
   #dlgTabs{margin:6px 0 4px}
   input[type=text],input[type=number]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);font:14px "Space Grotesk",system-ui,sans-serif;padding:10px 12px;border-radius:12px;width:100%;min-width:0}
@@ -318,6 +318,26 @@
   #phRecap img{width:100%;border-radius:12px;margin-top:10px}
   .ph-hist{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6}
 
+  /* ===== camera (phones + projector photo booth) ===== */
+  .cam{position:fixed;inset:0;z-index:12;background:#000;color:#fff}
+  .cam[hidden]{display:none}
+  .cam video,.cam img.shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .cam video.mirror{transform:scaleX(-1)}
+  .cam-top{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:max(14px,env(safe-area-inset-top)) 14px 14px;background:linear-gradient(rgba(0,0,0,.55),transparent)}
+  .cam-top .msg{font-size:14px;text-align:center;flex:1;text-shadow:0 1px 4px #000}
+  .cam-bar{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-around;align-items:center;gap:12px;padding:20px 20px max(26px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.6))}
+  .cam-btn{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;font:600 15px "Space Grotesk",system-ui,sans-serif;padding:10px 16px;cursor:pointer;min-width:64px}
+  #camLive{display:grid;grid-template-columns:1fr auto 1fr;justify-items:center}
+  .shutter{width:78px;height:78px;border-radius:50%;background:#fff;border:6px solid rgba(255,255,255,.4);background-clip:padding-box;cursor:pointer;box-shadow:0 0 0 3px #fff}
+  .shutter:active{transform:scale(.94)}
+  .cam-count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 min(40vw,42vh) "Space Grotesk",system-ui,sans-serif;text-shadow:0 0 40px var(--accent),0 0 8px #000;pointer-events:none}
+  .cam-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+  .cam-flash.go{animation:camflash .5s ease-out}
+  @keyframes camflash{from{opacity:.95}to{opacity:0}}
+  .cam-title{position:absolute;left:0;right:0;top:12%;text-align:center;font:700 clamp(28px,4vw,72px) "Space Grotesk",system-ui,sans-serif;text-shadow:0 0 30px var(--accent),0 2px 8px #000;pointer-events:none}
+  .ph-photo-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .ph-photo-btns > *{text-align:center;text-decoration:none}
+
   /* phone view (?sync=CODE) */
   body.phone .wrap{display:none}
   #phone{max-width:460px;margin:0 auto;padding:18px 16px 40px;min-height:100vh;display:flex;flex-direction:column;gap:16px}
@@ -480,15 +500,39 @@
           </div>
         </div>
       </div>
-      <p class="hint" id="kbdHint"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>S</kbd> skip · <kbd>F</kbd> projector · <kbd>Q</kbd> big QR · <kbd>V</kbd> visualizer · <kbd>T</kbd> tap tempo</p>
+      <p class="hint" id="kbdHint"><kbd>Space</kbd> start/pause · <kbd>R</kbd> reset · <kbd>S</kbd> skip · <kbd>F</kbd> projector · <kbd>Q</kbd> big QR · <kbd>V</kbd> visualizer · <kbd>T</kbd> tap tempo · <kbd>P</kbd> group photo</p>
     </section>
 
     <!-- CREW -->
     <section class="card" id="crewCard" hidden>
       <div class="crew-h"><h2>👥 The crew</h2><span class="crew-tot" id="crewTot"></span></div>
+      <div class="testrow" id="boothRow" style="margin:-4px 0 10px"><button class="ghost sm" id="boothBtn" title="Take a group photo with this computer's camera (P)">📸 Group photo</button></div>
       <div class="jail" id="jailBox" hidden></div>
       <div class="crew-list" id="crewList"></div>
     </section>
+  </div>
+</div>
+
+<!-- CAMERA -->
+<div class="cam" id="cam" hidden>
+  <video id="camVid" playsinline muted autoplay></video>
+  <img class="shot" id="camShot" alt="" hidden>
+  <div class="cam-title" id="camTitle" hidden></div>
+  <div class="cam-count" id="camCount"></div>
+  <div class="cam-flash" id="camFlash"></div>
+  <div class="cam-top">
+    <button class="cam-btn" id="camClose" aria-label="Close camera">✕</button>
+    <span class="msg" id="camMsg"></span>
+    <button class="cam-btn" id="camTimer">⏱ Off</button>
+  </div>
+  <div class="cam-bar" id="camLive">
+    <button class="cam-btn" id="camFlip" aria-label="Switch camera">🔄 Flip</button>
+    <button class="shutter" id="camSnap" aria-label="Take photo"></button>
+    <span style="min-width:64px"></span>
+  </div>
+  <div class="cam-bar" id="camReview" hidden>
+    <button class="cam-btn" id="camRetake">↺ Retake</button>
+    <button class="big sm" id="camSend">Add to album</button>
   </div>
 </div>
 
@@ -555,7 +599,10 @@
     <div class="ph-stat" id="phStats" hidden></div>
     <div class="ph-jail" id="phJail" hidden></div>
     <div id="phPhotoBox" hidden style="margin-top:12px">
-      <label class="ghost" style="display:block;text-align:center">📸 Add photos to the album<input type="file" id="phPhotoIn" accept="image/*" multiple hidden></label>
+      <div class="ph-photo-btns">
+        <button class="big sm" id="phCamBtn">📷 Take a photo</button>
+        <label class="ghost sm" id="phPickLbl">🖼 From gallery<input type="file" id="phPhotoIn" accept="image/*" multiple hidden></label>
+      </div>
       <div class="hint" id="phPhotoMsg" style="margin-top:6px"></div>
     </div>
   </div>
@@ -1875,6 +1922,8 @@ $("imgfile").onchange = e => {
 
 document.addEventListener("keydown", e => {
   if($("endMsgBox").classList.contains("on") && (e.key === "Escape" || e.key === "Enter" || e.key === " ")){ e.preventDefault(); hideEndMsg(); return; }
+  if(!$("cam").hidden) return;
+  if((e.key === "p" || e.key === "P") && !e.target.matches("input,select") && !document.querySelector("dialog[open]")){ $("boothBtn").click(); return; }
   if((e.key === "q" || e.key === "Q") && !e.target.matches("input,select")){
     if($("syncBig").open) $("syncBig").close(); else if(!document.querySelector("dialog[open]")) openSyncBig();
     return;
@@ -2721,6 +2770,7 @@ function renderCrew(){
   if(night && S.gStats) tot.push(`${minsTxt(night.focusMs)} focused`, `${night.sessions} session${night.sessions === 1 ? "" : "s"}`);
   if(night && S.gGoals && night.goalsDone) tot.push(`${night.goalsDone} goal${night.goalsDone === 1 ? "" : "s"} done`);
   if(night && S.gPhotos && night.photos) tot.push(`📸 ${night.photos}`);
+  $("boothRow").hidden = !S.gPhotos;
   $("crewTot").textContent = tot.join(" · ");
   if(!list.length){
     $("crewList").innerHTML = `<div class="crew-empty">Scan the QR code to join.${S.gGoals ? " Your name and goal show up here." : ""}</div>`;
@@ -2929,7 +2979,7 @@ loadNight(); renderCrew();
 var me = store.get("fj-me");
 if(!me || !me.id){ me = {id:newCode() + newCode(), name:"", emoji:EMOJIS[Math.floor(Math.random()*EMOJIS.length)]}; store.set("fj-me", me); }
 var phG = null, phSendQ = [], phSendT = null, phMyHist = store.get("fj-my-hist") || [], phCollage = {}, phRecapSeen = store.get("fj-recap-seen") || "";
-var wakeLock = null, phPhotoN = 0;
+var wakeLock = null, phPhotoN = 0, phPicking = false, phPickT = null;
 function phSend(m, allowRelay = true){
   m = Object.assign({from:me.id, mid:newCode()}, m);
   if(phConn && phConn.open){ try{ phConn.send(m); return true; }catch(e){} }
@@ -3028,6 +3078,14 @@ async function phCompress(file){
   cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
   return cv.toDataURL("image/jpeg", .82);
 }
+async function phSendPhotoData(data){
+  const msg = t => $("phPhotoMsg").textContent = t;
+  if(!(phConn && phConn.open)){ msg("Photos need a direct connection to the big screen. Try the same Wi-Fi as the projector, then reload."); return false; }
+  msg("Sending…");
+  if(!phSend({t:"photo", pid:me.id.slice(0, 8) + newCode(), data}, false)){ msg("Lost the connection. Try again in a moment."); return false; }
+  phPhotoN++; msg(`📸 Added! (${phPhotoN} from you tonight)`);
+  return true;
+}
 async function phSendPhotos(files){
   const msg = t => $("phPhotoMsg").textContent = t;
   if(!(phConn && phConn.open)){ msg("Photos need a direct connection to the big screen. Try the same Wi-Fi as the projector, then reload."); return; }
@@ -3061,16 +3119,113 @@ if(SYNC){
   $("phGoalDone").onclick = () => { phSend({t:"done"}); if(navigator.vibrate) navigator.vibrate(80);
     if(phG){ const mine = (phG.ppl || []).find(p => p.id === me.id); if(mine){ mine.d = true; mine.gd = (mine.gd || 0) + 1; } phGroupRender(phG); } };
   $("phGoalNew").onclick = () => { $("phGoalSet").hidden = false; $("phGoalShow").hidden = true; $("phGoalIn").focus(); };
-  $("phPhotoIn").onchange = e => { phSendPhotos(Array.from(e.target.files || [])); e.target.value = ""; };
+  $("phPhotoIn").onchange = e => { phPicking = false; phSendPhotos(Array.from(e.target.files || [])); e.target.value = ""; };
+  // the gallery picker briefly leaves the page; that shouldn't count as phone jail
+  $("phPickLbl").addEventListener("click", () => { phPicking = true; clearTimeout(phPickT); phPickT = setTimeout(() => { phPicking = false; }, 120000); });
+  addEventListener("focus", () => setTimeout(() => { if(phPicking && !document.hidden){ phPicking = false; } }, 1500));
+  $("phCamBtn").onclick = () => camOpen("phone");
   // phone jail: tell the projector when this page is hidden or shown
   document.addEventListener("visibilitychange", () => {
-    if(me.name && phG) phSend({t:"away", away:document.hidden});
+    if(me.name && phG && !(document.hidden && phPicking)) phSend({t:"away", away:document.hidden});
     if(!document.hidden && phG) phWake(phG.f.jail);
   });
   addEventListener("pagehide", () => { if(me.name) phSend({t:"bye"}, false); });
   // keep relay-only phones counted as "here"
   setInterval(() => { if(me.name && phG && !(phConn && phConn.open)) phSend({t:"ping"}); }, 25000);
 }
+
+/* ================= camera: phones and the projector's photo booth ================= */
+var camStream = null, camFacing = "user", camTimer = 0, camMode = null, camShotData = null, camBusy = false, camAutoKeep = null;
+const PROJ_PERSON = () => ({id:"projector", name:roomName() + " (group photo)", emoji:"📽"});
+function camSetMsg(t){ $("camMsg").textContent = t || ""; }
+async function camOpen(mode){
+  camMode = mode;
+  camTimer = mode === "projector" ? 3 : 0;
+  camFacing = "user";
+  $("camTimer").textContent = camTimer ? `⏱ ${camTimer}s` : "⏱ Off";
+  $("camTitle").hidden = mode !== "projector";
+  $("camTitle").textContent = "Group photo! Everyone squeeze in 📸";
+  $("cam").hidden = false; camShowLive();
+  await camStart();
+  // only offer "Flip" if there's more than one camera (keep its space so the shutter stays centered)
+  try{ const n = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput").length; $("camFlip").style.visibility = n < 2 ? "hidden" : ""; }catch(e){}
+}
+async function camStart(){
+  camStop(true);
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ camSetMsg("This browser can't use the camera here."); return; }
+  camSetMsg("Starting the camera…");
+  try{
+    camStream = await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:camFacing, width:{ideal:1920}, height:{ideal:1080}}});
+    const v = $("camVid"); v.srcObject = camStream;
+    v.classList.toggle("mirror", camFacing === "user");   // selfie view feels natural mirrored; the saved photo isn't
+    await v.play().catch(() => {});
+    camSetMsg(camMode === "projector" ? "Press the button, Space or Enter" : "");
+  }catch(e){
+    camSetMsg(e && e.name === "NotAllowedError" ? "Camera blocked. Allow it from the 🔒 icon in the address bar, then try again." : "Couldn't start the camera.");
+  }
+}
+function camStop(keepOpen){
+  if(camStream){ camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  if(!keepOpen){ $("cam").hidden = true; clearTimeout(camAutoKeep); camBusy = false; $("camCount").textContent = ""; }
+}
+function camShowLive(){
+  $("camLive").hidden = false; $("camReview").hidden = true; $("camShot").hidden = true; $("camVid").hidden = false;
+  if(camMode === "projector") $("camTitle").hidden = false;
+}
+async function camSnap(){
+  if(camBusy || !camStream) return;
+  camBusy = true;
+  for(let n = camTimer; n > 0; n--){
+    $("camCount").textContent = n;
+    if(camMode === "projector"){ unlockAudio(); playSound("marimba", undefined, 1); }
+    await sleep(1000);
+    if($("cam").hidden){ camBusy = false; return; }   // closed during the countdown
+  }
+  $("camCount").textContent = ""; $("camTitle").hidden = true;
+  const v = $("camVid"), w = v.videoWidth, h = v.videoHeight;
+  if(!w || !h){ camBusy = false; camSetMsg("The camera isn't ready yet. Try again."); return; }
+  const sc = Math.min(1, 1600 / Math.max(w, h)), cv = document.createElement("canvas");
+  cv.width = Math.round(w*sc); cv.height = Math.round(h*sc);
+  cv.getContext("2d").drawImage(v, 0, 0, cv.width, cv.height);
+  camShotData = cv.toDataURL("image/jpeg", .85);
+  $("camFlash").classList.remove("go"); void $("camFlash").offsetWidth; $("camFlash").classList.add("go");
+  if(navigator.vibrate) navigator.vibrate(40);
+  $("camShot").src = camShotData; $("camShot").hidden = false; $("camVid").hidden = true;
+  $("camLive").hidden = true; $("camReview").hidden = false;
+  $("camSend").textContent = "Add to album";
+  camBusy = false;
+  if(camMode === "projector"){
+    camSetMsg("Adding to the album in 6s… (Retake to try again)");
+    clearTimeout(camAutoKeep); camAutoKeep = setTimeout(camKeep, 6000);
+  } else camSetMsg("");
+}
+async function camKeep(){
+  clearTimeout(camAutoKeep);
+  if(!camShotData) return;
+  const data = camShotData; camShotData = null;
+  if(camMode === "projector"){
+    ensureNight();
+    await savePhoto(PROJ_PERSON(), {data, pid:"proj" + newCode()});
+    camStop();
+  } else {
+    $("camSend").textContent = "Sending…";
+    const ok = await phSendPhotoData(data);
+    if(ok){ camStop(); }
+    else { camSetMsg($("phPhotoMsg").textContent); $("camSend").textContent = "Try again"; camShotData = data; }
+  }
+}
+$("camClose").onclick = () => camStop();
+$("camSnap").onclick = camSnap;
+$("camRetake").onclick = () => { clearTimeout(camAutoKeep); camShotData = null; camShowLive(); camSetMsg(camMode === "projector" ? "Press the button, Space or Enter" : ""); };
+$("camSend").onclick = camKeep;
+$("camFlip").onclick = () => { camFacing = camFacing === "user" ? "environment" : "user"; camStart(); };
+$("camTimer").onclick = () => { camTimer = {0:3, 3:10, 10:0}[camTimer]; $("camTimer").textContent = camTimer ? `⏱ ${camTimer}s` : "⏱ Off"; };
+$("boothBtn").onclick = () => { if(!S.gPhotos){ gToast("Turn on the photo album in Customize → Group first."); return; } camOpen("projector"); };
+document.addEventListener("keydown", e => {
+  if($("cam").hidden) return;
+  if(e.key === "Escape"){ e.preventDefault(); camStop(); }
+  else if(e.key === " " || e.key === "Enter"){ e.preventDefault(); if(!$("camReview").hidden) camKeep(); else camSnap(); }
+}, true);
 
 /* ================= start up ================= */
 (async function init(){
