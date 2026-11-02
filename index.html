@@ -307,7 +307,9 @@
   body.stage.crew #embed{min-height:80px}
   body.stage.crew #embed iframe{height:80px !important}
   body.stage.crew #npArt{width:clamp(56px,9vh,130px);height:clamp(56px,9vh,130px)}
-  body.stage.crew .np-ctrl,body.stage.crew #np .bar,body.stage.crew #np .np-times{display:none}
+  body.stage.crew .np-ctrl{display:none}
+  body.stage.crew #np .bar{margin-top:10px}
+  body.stage.crew #np .np-times{margin-top:4px;font-size:clamp(11px,.85vw,17px)}
   body.stage.crew .np-title{font-size:clamp(17px,1.8vw,36px)}
   body.stage.crew h2{margin-bottom:2px}
   body.stage.crew .card{padding:clamp(14px,1.5vw,30px)}
@@ -783,6 +785,10 @@
         <label>Intensity<select id="s-vizLevel"><option value="chill">Chill</option><option value="party">Party</option><option value="rave">Rave</option></select></label>
         <label>React to<select id="s-vizSrc"><option value="system">The computer's sound (best)</option><option value="mic">A microphone or input</option><option value="beat">A steady beat (tap T)</option></select></label>
       </div>
+      <div class="sounds">
+        <label>Colors<select id="s-vizColors"><option value="rainbow">Rainbow</option><option value="album">From the album art</option><option value="theme">My theme colors</option></select></label>
+        <label>Colors right now<span id="vizSwatches" style="display:flex;gap:6px;align-items:center;min-height:38px"></span></label>
+      </div>
       <div class="sliders" style="grid-template-columns:1fr 1fr">
         <label>Sensitivity: <span id="vizSensVal"></span><input type="range" id="s-vizSens" min="0" max="100"></label>
         <label>Decay (how long the lights linger): <span id="vizDecayVal"></span><input type="range" id="s-vizDecay" min="0" max="100"></label>
@@ -970,7 +976,7 @@ const MODE_IDX = {focus:0, short:1, long:2};
 const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              focusSound:"chime", breakSound:"bell", volume:70, repeat:1, jamLink:"",
              clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
-             viz:true, vizLevel:"party", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
+             viz:true, vizLevel:"party", vizColors:"rainbow", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
              vizStopAtEnd:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
              fadeMusic:true, fadeSecs:4,
              gGoals:true, gJail:true, gStats:true, gPhotos:true, jailGrace:20, roomName:"", deviceId:"",
@@ -1859,6 +1865,7 @@ renderPlUI();
 /* lyrics */
 function updateLyrBtns(){
   syncSoon();
+  if(typeof renderVizSwatches === "function" && S.vizColors === "album") renderVizSwatches();
   const ok = !!(curTrack && curTrack.uri && /^spotify:track:/.test(curTrack.uri));
   ["lyrEmbed","lyrApp"].forEach(id => { $(id).disabled = !ok; $(id).title = ok ? "Lyrics & karaoke" : "Play a song first"; });
   if($("lyr").open) fillLyrics();
@@ -2490,6 +2497,87 @@ function vizTogglePreview(){ vizPreview = !vizPreview; vizUpdate(); }
 
 // Returns {bands:[0..1]x64, bass, mid, high, beat:true/false}
 var vizDisp = null, vizLastT = 0;
+/* ----- visualizer colors: rainbow, theme, or pulled from the current album cover ----- */
+var artPalettes = {}, artPal = null, artPalUrl = "";
+function rgbToHsl(r, g, b){
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn)/2, d = mx - mn;
+  if(!d) return {h:0, s:0, l:l*100};
+  const s = d / (1 - Math.abs(2*l - 1));
+  let h = mx === r ? ((g - b)/d) % 6 : mx === g ? (b - r)/d + 2 : (r - g)/d + 4;
+  h = (h*60 + 360) % 360;
+  return {h, s:s*100, l:l*100};
+}
+const hexHsl = hex => { const [r,g,b] = rgb(hex); return rgbToHsl(r, g, b); };
+// Group the cover's pixels by hue and keep the most eye-catching few (lots of pixels, saturated, not too dark or bright).
+function paletteFromImage(img){
+  const N = 48, cv = document.createElement("canvas"); cv.width = cv.height = N;
+  const x = cv.getContext("2d", {willReadFrequently:true}); x.drawImage(img, 0, 0, N, N);
+  const px = x.getImageData(0, 0, N, N).data;   // throws if the image server doesn't allow reading it
+  const buckets = Array.from({length:24}, () => ({w:0, h:0, s:0, l:0, n:0}));
+  let grayW = 0, gray = {l:0, n:0};
+  for(let i = 0; i < px.length; i += 4){
+    const c = rgbToHsl(px[i], px[i+1], px[i+2]);
+    if(c.l < 8 || c.l > 94) continue;
+    if(c.s < 18){ grayW++; gray.l += c.l; gray.n++; continue; }
+    const w = (c.s/100) * (1 - Math.abs(c.l - 55)/55), bk = buckets[Math.floor(c.h/15) % 24];
+    bk.w += w; bk.n++; bk.s += c.s*w; bk.l += c.l*w;
+    // average hue on a circle
+    bk.hx = (bk.hx || 0) + Math.cos(c.h*Math.PI/180)*w; bk.hy = (bk.hy || 0) + Math.sin(c.h*Math.PI/180)*w;
+  }
+  const picks = [];
+  for(const bk of buckets.filter(b => b.w > 0).sort((a,b) => b.w - a.w)){
+    const h = (Math.atan2(bk.hy, bk.hx)*180/Math.PI + 360) % 360, col = {h, s:bk.s/bk.w, l:bk.l/bk.w};
+    if(picks.every(p => Math.min(Math.abs(p.h - h), 360 - Math.abs(p.h - h)) > 28)) picks.push(col);
+    if(picks.length === 4) break;
+  }
+  // mostly black-and-white covers: use their tones plus a cool highlight so the show isn't gray mush
+  if(picks.length < 2 && gray.n) picks.push({h:220, s:15, l:gray.l/gray.n}, {h:200, s:70, l:60});
+  return picks.length ? picks : null;
+}
+function loadArtPalette(url){
+  if(!url || artPalettes[url] !== undefined){ artPal = artPalettes[url] || null; artPalUrl = url || ""; renderVizSwatches(); return; }
+  artPalettes[url] = null; artPalUrl = url;
+  const img = new Image(); img.crossOrigin = "anonymous";
+  img.onload = () => {
+    try{ artPalettes[url] = paletteFromImage(img); }catch(e){ artPalettes[url] = false; }   // false = not allowed to read it
+    if(artPalUrl === url){ artPal = artPalettes[url] || null; renderVizSwatches(); }
+  };
+  img.onerror = () => { artPalettes[url] = false; if(artPalUrl === url){ artPal = null; renderVizSwatches(); } };
+  img.src = url;
+}
+// the colors the visualizer uses right now, or null for rainbow
+function vizPalette(){
+  if(S.vizColors === "album"){
+    const url = curTrack && curTrack.art;
+    if(url !== artPalUrl) loadArtPalette(url);
+    return artPal;
+  }
+  if(S.vizColors === "theme"){
+    const t = THEMES[S.theme] || THEMES.tomato;
+    return (S.customAccent ? [S.customAccent] : []).concat(t.acc).map(hexHsl);
+  }
+  return null;
+}
+// A color for "position" t (the old rainbow hue offsets). With a palette, t walks smoothly from one palette color to the next.
+function vc(t, light, alpha, pal){
+  if(!pal) return `hsla(${((vizHue + t) % 360 + 360) % 360},100%,${light}%,${alpha})`;
+  const n = pal.length, pos = (((vizHue/360)*n + t/90) % n + n) % n, i = Math.floor(pos), f = pos - i;
+  const a = pal[i], b = pal[(i + 1) % n];
+  let dh = b.h - a.h; if(dh > 180) dh -= 360; if(dh < -180) dh += 360;
+  const h = (a.h + dh*f + 360) % 360, sat = Math.max(55, a.s + (b.s - a.s)*f);
+  return `hsla(${h.toFixed(1)},${sat.toFixed(0)}%,${light}%,${alpha})`;
+}
+function renderVizSwatches(){
+  const el = $("vizSwatches"); if(!el) return;
+  const pal = vizPalette();
+  if(S.vizColors === "album" && !pal){
+    el.innerHTML = `<span class="hint" style="margin:0">${!(curTrack && curTrack.art) ? "Play a song to see its colors" : artPalettes[curTrack.art] === false ? "Couldn't read this cover, so it uses rainbow" : "Reading the cover…"}</span>`;
+    return;
+  }
+  el.innerHTML = pal ? pal.map(c => `<i style="width:26px;height:26px;border-radius:50%;background:hsl(${c.h},${Math.max(55,c.s)}%,${Math.min(70,Math.max(45,c.l))}%);border:2px solid var(--line)"></i>`).join("")
+    : `<i style="width:110px;height:14px;border-radius:7px;background:linear-gradient(90deg,red,orange,yellow,lime,cyan,blue,magenta)"></i>`;
+}
 function vizAudio(now){
   const N = 64, bands = new Array(N).fill(0);
   let bass = 0, mid = 0, high = 0, beat = false;
@@ -2545,7 +2633,7 @@ function vizFrame(now){
   if(a.beat){ vizBeat = 1; if(S.vizStrobe && S.vizLevel !== "chill" && now - vizLastFlash > 340){ vizFlash = 1; vizLastFlash = now; } }   // never more than ~3 flashes a second
   vizBeat *= .8 + (S.vizDecay ?? 50)/100*.17; vizFlash *= .78;   // beat pulses linger longer with more decay
   vizHue = (vizHue + .25*L.speed + a.high*1.5*L.speed) % 360;
-  const acc = colors().accent, hue = vizHue;
+  const acc = colors().accent, hue = vizHue, pal = vizPalette();
 
   c.globalCompositeOperation = "source-over";
   c.clearRect(0, 0, W, H);
@@ -2558,8 +2646,8 @@ function vizFrame(now){
 
   // 1. bass glow behind everything
   const g = c.createRadialGradient(cx, cy, R*.3, cx, cy, Math.max(W, H)*.75);
-  g.addColorStop(0, `hsla(${hue},95%,60%,${(.18 + a.bass*.5)*L.glow})`);
-  g.addColorStop(.45, `hsla(${(hue+60)%360},90%,50%,${(.06 + a.bass*.18)*L.glow})`);
+  g.addColorStop(0, vc(0, 60, (.18 + a.bass*.5)*L.glow, pal));
+  g.addColorStop(.45, vc(60, 50, (.06 + a.bass*.18)*L.glow, pal));
   g.addColorStop(1, "rgba(0,0,0,0)");
   c.fillStyle = g; c.fillRect(0, 0, W, H);
 
@@ -2569,10 +2657,10 @@ function vizFrame(now){
     const sweep = Math.sin(now/1000*(.55 + i*.11)*L.speed + i*1.7);
     const ang = (left ? Math.PI*.25 : Math.PI*.75) + sweep*.55;
     const len = Math.hypot(W, H)*1.2, ex = ox + Math.cos(ang)*len, ey = oy + Math.sin(ang)*len;
-    const hh = (hue + i*45) % 360, width = 1.5 + a.mid*4 + vizBeat*6;
-    c.strokeStyle = `hsla(${hh},100%,60%,${.25 + a.mid*.4 + vizBeat*.3})`; c.lineWidth = width*3; c.lineCap = "round";
+    const width = 1.5 + a.mid*4 + vizBeat*6;
+    c.strokeStyle = vc(i*45, 60, .25 + a.mid*.4 + vizBeat*.3, pal); c.lineWidth = width*3; c.lineCap = "round";
     c.beginPath(); c.moveTo(ox, oy); c.lineTo(ex, ey); c.stroke();
-    c.strokeStyle = `hsla(${hh},100%,88%,${.5 + vizBeat*.4})`; c.lineWidth = Math.max(1, width*.5);
+    c.strokeStyle = vc(i*45, 88, .5 + vizBeat*.4, pal); c.lineWidth = Math.max(1, width*.5);
     c.beginPath(); c.moveTo(ox, oy); c.lineTo(ex, ey); c.stroke();
   }
 
@@ -2581,7 +2669,7 @@ function vizFrame(now){
   for(let i = 0; i < n; i++){
     const v = a.bands[i < n/2 ? i : n-1-i], ang = -Math.PI/2 + i/n*Math.PI*2;
     const r0 = R*1.04 + vizBeat*R*.04, r1 = r0 + 6 + v*R*.55*L.bars;
-    c.strokeStyle = `hsla(${(hue + i/n*240) % 360},100%,${55 + v*25}%,${.55 + v*.45})`;
+    c.strokeStyle = vc(i/n*240, 55 + v*25, .55 + v*.45, pal);
     c.lineWidth = Math.max(2, R*Math.PI*2/n*.55); c.lineCap = "round";
     c.beginPath(); c.moveTo(cx + Math.cos(ang)*r0, cy + Math.sin(ang)*r0); c.lineTo(cx + Math.cos(ang)*r1, cy + Math.sin(ang)*r1); c.stroke();
   }
@@ -2590,7 +2678,7 @@ function vizFrame(now){
   const bw = W/(a.bands.length*2);
   for(let i = 0; i < a.bands.length; i++){
     const v = a.bands[i], h = v*H*.28*L.bars + 2;
-    c.fillStyle = `hsla(${(hue + 180 + i*3) % 360},100%,60%,${.35 + v*.5})`;
+    c.fillStyle = vc(180 + i*3, 60, .35 + v*.5, pal);
     c.fillRect(W/2 + i*bw + 1, H - h, bw - 2, h);
     c.fillRect(W/2 - (i+1)*bw + 1, H - h, bw - 2, h);
   }
@@ -2598,7 +2686,7 @@ function vizFrame(now){
   // 5. waveform line across the middle (microphone only)
   if(vizAnalyser && !vizMicFailed && S.vizSrc !== "beat" && S.vizLevel !== "chill"){
     vizAnalyser.getByteTimeDomainData(vizWave);
-    c.strokeStyle = `hsla(${(hue+120)%360},100%,70%,.55)`; c.lineWidth = 2; c.beginPath();
+    c.strokeStyle = vc(120, 70, .55, pal); c.lineWidth = 2; c.beginPath();
     for(let i = 0; i < vizWave.length; i += 4){ const x = i/vizWave.length*W, y = H*.5 + (vizWave[i]-128)/128*H*.18; i ? c.lineTo(x, y) : c.moveTo(x, y); }
     c.stroke();
   }
@@ -2606,13 +2694,13 @@ function vizFrame(now){
   // 6. particles burst out of the ring on each beat
   if(a.beat) for(let i = 0; i < L.parts; i++){
     const ang = Math.random()*Math.PI*2, sp = 2 + Math.random()*6*(.5 + a.bass);
-    vizParts.push({x:cx + Math.cos(ang)*R, y:cy + Math.sin(ang)*R, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp, life:1, h:(hue + Math.random()*90) % 360, s:2 + Math.random()*4});
+    vizParts.push({x:cx + Math.cos(ang)*R, y:cy + Math.sin(ang)*R, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp, life:1, h:Math.random()*90, s:2 + Math.random()*4});
   }
   vizParts = vizParts.filter(p => (p.life -= .016) > 0);
   if(vizParts.length > 400) vizParts.splice(0, vizParts.length - 400);
   for(const p of vizParts){
     p.x += p.vx; p.y += p.vy; p.vx *= .985; p.vy = p.vy*.985 + .03;
-    c.fillStyle = `hsla(${p.h},100%,65%,${p.life})`;
+    c.fillStyle = vc(p.h, 65, p.life, pal);
     c.beginPath(); c.arc(p.x, p.y, p.s*p.life + .5, 0, Math.PI*2); c.fill();
   }
 
@@ -2633,6 +2721,7 @@ function renderVizUI(){
   $("s-vizSens").value = S.vizSens; $("s-vizDecay").value = S.vizDecay; vizSliderLabels();
   $("s-vizStopAtEnd").checked = S.vizStopAtEnd;
   $("s-viz").checked = S.viz; $("s-vizLevel").value = S.vizLevel; $("s-vizSrc").value = S.vizSrc; $("s-vizStrobe").checked = S.vizStrobe;
+  $("s-vizColors").value = S.vizColors; renderVizSwatches();
   $("vizMic").hidden = S.vizSrc !== "mic";
   $("vizSys").hidden = S.vizSrc !== "system";
   $("vizSys").textContent = vizSysStream ? "🔊 Connected (click to reconnect)" : "🔊 Connect computer sound";
@@ -2643,6 +2732,7 @@ function renderVizUI(){
 }
 $("s-viz").onchange = e => { S.viz = e.target.checked; save(); vizUpdate(); };
 $("s-vizLevel").onchange = e => { S.vizLevel = e.target.value; save(); };
+$("s-vizColors").onchange = e => { S.vizColors = e.target.value; save(); renderVizSwatches(); };
 $("s-vizStopAtEnd").onchange = e => { S.vizStopAtEnd = e.target.checked; save(); };
 $("s-fadeMusic").checked = S.fadeMusic; $("s-fadeSecs").value = String(S.fadeSecs);
 $("s-fadeMusic").onchange = e => { S.fadeMusic = e.target.checked; save(); if(!S.fadeMusic) undoPreFade(); };
