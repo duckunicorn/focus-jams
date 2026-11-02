@@ -827,6 +827,13 @@
     </div>
 
     <div id="dlgGroup" class="dpane" hidden>
+      <h3>Your sync server</h3>
+      <div class="row" style="margin-bottom:6px">
+        <input type="text" id="s-syncServer" placeholder="focus-jams-relay.yourname.workers.dev" autocomplete="off" spellcheck="false">
+        <button class="ghost" id="srvTest">Test</button>
+      </div>
+      <p class="hint" id="srvMsg" style="margin-top:0">Paste the address of your own Cloudflare sync server here. Phones and this screen then sync through it, with no usage limits to worry about. Leave it empty to use the free public services instead.</p>
+
       <h3>Group features</h3>
       <p class="hint" style="margin-top:0">These use phone sync: people scan the QR code, pick a name, and their phone talks to this screen.</p>
       <div class="toggles" style="margin-top:6px">
@@ -979,7 +986,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              viz:true, vizLevel:"party", vizColors:"rainbow", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
              vizStopAtEnd:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
              fadeMusic:true, fadeSecs:4,
-             gGoals:true, gJail:true, gStats:true, gPhotos:true, jailGrace:20, roomName:"", deviceId:"",
+             gGoals:true, gJail:true, gStats:true, gPhotos:true, jailGrace:20, roomName:"", deviceId:"", syncServer:"",
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -1140,7 +1147,31 @@ function renderTime(){
   document.title = (running ? "▶ " : "") + fmt(remaining) + " · " + LABELS[mode];
   if($("syncBig").open){ $("sbTime").textContent = fmt(remaining); $("sbLabel").textContent = LABELS[mode] + (running ? "" : " · paused"); }
 }
+// The timer's state is saved whenever it changes, so a reload picks up exactly where it was.
+var timerRestored = false;
+function saveTimer(){ if(!SYNC && timerRestored) store.set("fj-timer", {mode, running, endAt, remaining, cycle, at:Date.now()}); }
+function restoreTimer(){
+  timerRestored = true;
+  if(SYNC) return false;
+  const T = store.get("fj-timer");
+  if(!T || !T.mode || Date.now() - (T.at || 0) > 8*3600*1000) return false;
+  mode = ["focus","short","long"].includes(T.mode) ? T.mode : "focus";
+  cycle = Math.max(0, Math.min(S.every - 1, T.cycle | 0));
+  if(!T.running){ remaining = Math.min(total(mode), Math.max(1, +T.remaining || total(mode))); return false; }
+  // sessions that ended while the page was closed: move on the way the timer would have
+  let end = +T.endAt || 0; const now = Date.now();
+  for(let i = 0; i < 40 && end <= now; i++){
+    if(mode === "focus"){ cycle++; mode = cycle >= S.every ? "long" : "short"; }
+    else { if(mode === "long") cycle = 0; mode = "focus"; }
+    if(!S.auto){ remaining = total(mode); return false; }
+    end += total(mode)*1000;
+  }
+  remaining = (end - now)/1000;
+  return true;
+}
+addEventListener("pagehide", () => saveTimer());
 function render(){
+  saveTimer();
   if(typeof vizUpdate === "function") vizUpdate();
   $("label").textContent = LABELS[mode];
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t.dataset.m === mode));
@@ -2033,6 +2064,37 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden && S.s
 /* ================= phone sync ================= */
 // The projector is a PeerJS "host"; each phone connects to it directly (WebRTC) using the code in the QR.
 const PEER_PREFIX = "focusjams-";
+/* ----- your own sync server (Cloudflare) ----- */
+const normHost = h => String(h || "").trim().replace(/^(wss?|https?):\/\//i, "").replace(/\/.*$/, "").toLowerCase().replace(/[^a-z0-9.\-:]/g, "");
+const PHSRV = SYNC ? normHost(new URLSearchParams(location.search).get("s")) : "";
+const cfHostName = () => SYNC ? PHSRV : normHost(S.syncServer);
+const cfOn = () => !!cfHostName();
+const cfUrl = (code, role, id) => `${/^(localhost|127\.)/.test(cfHostName()) ? "ws" : "wss"}://${cfHostName()}/room/${code}?role=${role}${id ? "&id=" + encodeURIComponent(id) : ""}`;
+// A connection object that looks like the PeerJS ones the rest of the code already knows how to use.
+function makeConn(sendFn){
+  const h = {};
+  const c = {open:false, peerConnection:null,
+    on(ev, fn){ (h[ev] = h[ev] || []).push(fn); return c; },
+    _emit(ev, x){ (h[ev] || []).slice().forEach(f => { try{ f(x); }catch(e){} }); },
+    send(m){ sendFn(m); },
+    close(){ if(c._closed) return; c._closed = true; c.open = false; c._emit("close"); }};
+  return c;
+}
+// keep big images under the sync server's 1 MB message limit
+async function fitData(dataUrl, max = 900000){
+  if(!dataUrl || dataUrl.length <= max) return dataUrl;
+  try{
+    const im = await createImageBitmap(await (await fetch(dataUrl)).blob());
+    for(const [w, q] of [[1400, .78], [1200, .72], [1000, .66], [800, .6]]){
+      const sc = Math.min(1, w / Math.max(im.width, im.height)), cv = document.createElement("canvas");
+      cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
+      cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+      const d = cv.toDataURL("image/jpeg", q);
+      if(d.length <= max) return d;
+    }
+  }catch(e){}
+  return dataUrl;
+}
 var peer = null, conns = new Set(), syncT = null, syncReady = false, peerRetry = null, connAlive = new Map();   // var: used before this section runs
 const peerOpts = () => Object.assign({debug:0}, window.FJ_PEER_OPTS || {});
 function loadPeerJs(){
@@ -2044,7 +2106,7 @@ function loadPeerJs(){
   });
 }
 function newCode(){ const a = new Uint8Array(8); crypto.getRandomValues(a); return Array.from(a, b => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join(""); }
-function syncUrl(){ return location.origin + location.pathname.replace(/index\.html$/, "") + "?sync=" + S.syncCode; }
+function syncUrl(){ return location.origin + location.pathname.replace(/index\.html$/, "") + "?sync=" + S.syncCode + (cfOn() ? "&s=" + encodeURIComponent(cfHostName()) : ""); }
 const LOCAL_ONLY = (IS_FILE || /^(127\.|localhost$|\[?::1)/.test(location.hostname)) && !window.FJ_PEER_OPTS;
 function syncState(){
   const c = colors();
@@ -2059,6 +2121,7 @@ function syncState(){
     auto:S.auto, durs:{focus:S.focus*60000, short:S.short*60000, long:S.long*60000}};
 }
 function broadcast(){
+  if(cfWs){ if(syncReady) cfSendAll(); return; }   // the sync server sends it to every phone
   if(!syncReady || !conns.size) return;
   const st = syncState();
   conns.forEach(c => { try{ if(c.open) c.send(st); }catch(e){} });
@@ -2088,7 +2151,7 @@ function relayBudget(){
 }
 var relayLastCrit = "";
 function relayPublish(force){
-  if(SYNC || !S.phoneSync || LOCAL_ONLY || !S.syncCode) return;
+  if(SYNC || !S.phoneSync || LOCAL_ONLY || !S.syncCode || cfOn()) return;   // own sync server: no public relay needed
   const st = syncState(), key = relayKey(st), crit = relayCritical(st), budget = relayBudget();
   if(!force && key === relayLastKey) return;
   // running low on today's messages: only send timer changes (session switches, pauses), not crew/song details
@@ -2117,8 +2180,51 @@ function renderSyncBox(){
     ? "Phone sync works on your GitHub Pages link — phones can't reach this computer's local address."
     : "A new code disconnects everyone's phone and changes the QR code.";
 }
+function attachConn(c){
+  c.on("open", () => { conns.add(c); connAlive.set(c, Date.now()); renderSyncBox(); try{ c.send(syncState()); }catch(e){} });
+  c.on("data", d => { connAlive.set(c, Date.now()); groupMsg(d, c); });
+  c.on("close", () => { conns.delete(c); groupConnClosed(c); renderSyncBox(); });
+  c.on("error", () => { conns.delete(c); groupConnClosed(c); renderSyncBox(); });
+}
+// projector ↔ your sync server: one WebSocket; each phone shows up as its own connection object
+var cfWs = null, cfConns = new Map(), cfRetryT = null;
+function cfSendAll(){ if(cfWs && cfWs.readyState === 1){ try{ cfWs.send(JSON.stringify({k:"all", m:syncState()})); return true; }catch(e){} } return false; }
+function cfStartHost(){
+  clearTimeout(cfRetryT);
+  let ws;
+  try{ ws = cfWs = new WebSocket(cfUrl(S.syncCode, "host")); }catch(e){ cfRetryT = setTimeout(cfStartHost, 5000); return; }
+  const phoneConn = id => {
+    let c = cfConns.get(id);
+    if(c && c.open) return c;
+    c = makeConn(m => { if(cfWs && cfWs.readyState === 1) cfWs.send(JSON.stringify({k:"to", id, m})); else throw new Error("offline"); });
+    cfConns.set(id, c); attachConn(c); c.open = true; c._emit("open");
+    return c;
+  };
+  ws.onopen = () => { if(ws !== cfWs) return; syncReady = true; renderSyncBox(); cfSendAll(); };
+  ws.onmessage = e => {
+    if(ws !== cfWs) return;
+    let o; try{ o = JSON.parse(e.data); }catch(err){ return; }
+    if(o.k === "join" && o.id){
+      const c = phoneConn(o.id), pp = people[o.id];
+      if(pp){ pp.online = true; pp.via = "peer"; pp.lastSeen = Date.now(); connPerson.set(c, o.id); renderCrew(); renderSyncBox(); }   // someone we already know is back
+    }
+    else if(o.k === "leave" && o.id){ const c = cfConns.get(o.id); if(c){ cfConns.delete(o.id); c.close(); } }
+    else if(o.k === "from" && o.id) phoneConn(o.id)._emit("data", o.m);
+  };
+  ws.onclose = () => {
+    if(ws !== cfWs) return;
+    cfWs = null; syncReady = false;
+    cfConns.forEach(c => c.close()); cfConns.clear();
+    renderSyncBox(); $("syncCount").textContent = "Reconnecting to your sync server…";
+    cfRetryT = setTimeout(cfStartHost, 3000);
+  };
+  ws.onerror = () => {};
+}
+setInterval(() => { if(cfWs && cfWs.readyState === 1) try{ cfWs.send("ping"); }catch(e){} }, 25000);   // keeps the line open
 function stopHost(){
-  clearTimeout(peerRetry); syncReady = false;
+  clearTimeout(peerRetry); clearTimeout(cfRetryT); syncReady = false;
+  if(cfWs){ const w = cfWs; cfWs = null; try{ w.close(); }catch(e){} }
+  cfConns.forEach(c => c.close()); cfConns.clear();
   conns.forEach(c => { try{ c.close(); }catch(e){} }); conns.clear();
   if(peer){ try{ peer.destroy(); }catch(e){} peer = null; }
 }
@@ -2126,17 +2232,13 @@ async function startHost(){
   stopHost(); renderSyncBox();
   if(!S.phoneSync || LOCAL_ONLY) return;
   if(!S.syncCode){ S.syncCode = newCode(); save(); renderSyncBox(); }
+  if(cfOn()){ cfStartHost(); return; }   // own sync server: no PeerJS, no public relay
   relayLastKey = ""; relayPublish(true);
   startRelayInbox();
   try{ await loadPeerJs(); }catch(e){ $("syncCount").textContent = "Couldn't load phone sync"; return; }
   const p = peer = new Peer(PEER_PREFIX + S.syncCode, peerOpts());
   p.on("open", () => { if(p !== peer) return; syncReady = true; renderSyncBox(); });
-  p.on("connection", c => {
-    c.on("open", () => { conns.add(c); connAlive.set(c, Date.now()); renderSyncBox(); c.send(syncState()); });
-    c.on("data", d => { connAlive.set(c, Date.now()); groupMsg(d, c); });
-    c.on("close", () => { conns.delete(c); groupConnClosed(c); renderSyncBox(); });
-    c.on("error", () => { conns.delete(c); groupConnClosed(c); renderSyncBox(); });
-  });
+  p.on("connection", attachConn);
   // Losing the matchmaking server does NOT affect phones that are already connected (they talk to us
   // directly), so just quietly reconnect to it in the background and leave existing phones alone.
   const reconnectSignal = () => {
@@ -2180,7 +2282,7 @@ setInterval(() => {
 /* ----- phone side ----- */
 var phState = null, phEnd = 0, phConn = null, phPeer = null, phRetry = null, phLastMode = null;
 function phSetStatus(t, live){ $("phStatus").textContent = t; $("phLive").classList.toggle("on", !!live); }
-var phLastT = 0, phGotData = 0, relayOpen = false, phSince = Date.now(), phMsgSeq = null;
+var phLastT = 0, phGotData = 0, relayOpen = false, phSince = Date.now(), phMsgSeq = null, phOffline = false;
 function phApply(st, via){
   if(!st || st.v !== 1) return;
   if(st.t && st.t <= phLastT) return;     // already have something newer from the other path
@@ -2278,12 +2380,12 @@ async function startPhone(){
   $("phProg").style.strokeDasharray = C;
   setInterval(phTick, 250);
   $("phLyr").onclick = () => { curTrack = phState.song; fillLyrics(); $("lyr").showModal(); };
-  startRelay();
+  if(!cfOn()) startRelay();   // with your own sync server, no public relay is needed
   setInterval(() => {   // still nothing after 15s: show tips
     if(!phGotData && Date.now() - phSince > 15000) $("phHelp").hidden = false;
   }, 1000);
   let peerOk = true;
-  try{ await loadPeerJs(); }catch(e){ peerOk = false; }
+  if(!cfOn()){ try{ await loadPeerJs(); }catch(e){ peerOk = false; } }
   // Status only says "Reconnecting" if we've been without the screen for a few seconds, so brief blips don't flicker.
   let downSince = 0, lastData = 0;
   const isLive = () => (!!(phConn && phConn.open) && Date.now() - lastData < 30000) || (relayOpen && phGotData > 0);
@@ -2294,10 +2396,35 @@ async function startPhone(){
     // connection open but silent for 30s (the screen sends an update every 10s): it's dead, replace it
     if(phConn && phConn.open && Date.now() - lastData > 30000){ try{ phConn.close(); }catch(e){} phConn = null; connect(); }
   }, 1000);
-  let phOffline = false;
+  phOffline = false;
   const retry = ms => { clearTimeout(phRetry); phRetry = setTimeout(connect, ms); };
+  // what to do with a connection once it exists (same for PeerJS and the sync server)
+  const wireConn = c => {
+    c.on("open", () => { if(c !== phConn) return; phOffline = false; lastData = Date.now(); phHello(); });
+    // projector updates have v:1 (their "t" is a timestamp); other messages have a word in "t" ("photoFull", "album"…)
+    c.on("data", d => { if(c !== phConn || !d) return; lastData = Date.now(); if(d.v === 1) phApply(d, "peer"); else if(typeof d.t === "string") phMsg(d); });
+    const lost = () => { if(c !== phConn) return; phConn = null; retry(2000); };
+    c.on("close", lost);
+    c.on("error", lost);
+    // if it hasn't opened after 15s, try again
+    setTimeout(() => { if(c === phConn && !c.open){ try{ c.close(); }catch(e){} phConn = null; connect(); } }, 15000);
+  };
   const connect = () => {
     clearTimeout(phRetry);
+    if(cfOn()){
+      if(phConn && (phConn.open || (phConn._ws && phConn._ws.readyState === 0))) return;   // connected, or still connecting
+      let ws;
+      try{ ws = new WebSocket(cfUrl(SYNC, "phone", me.id)); }catch(e){ retry(4000); return; }
+      const c = makeConn(m => { if(ws.readyState === 1) ws.send(JSON.stringify(m)); else throw new Error("offline"); });
+      const baseClose = c.close; c.close = () => { try{ ws.close(); }catch(e){} baseClose(); };
+      c._ws = ws; phConn = c;
+      wireConn(c);
+      ws.onopen = () => { c.open = true; c._emit("open"); };
+      ws.onmessage = e => { let d; try{ d = JSON.parse(e.data); }catch(err){ return; } c._emit("data", d); };
+      ws.onclose = () => c.close();
+      ws.onerror = () => {};
+      return;
+    }
     if(!peerOk) return;                            // direct connections unavailable; the relay carries updates
     if(phConn && phConn.open) return;              // never replace a working connection
     if(!phPeer || phPeer.destroyed){
@@ -2314,13 +2441,7 @@ async function startPhone(){
     }
     if(!phPeer.open) return;                        // waiting for the matchmaking server; "open" will call us
     const c = phConn = phPeer.connect(PEER_PREFIX + SYNC, {reliable:true});
-    c.on("open", () => { if(c !== phConn) return; phOffline = false; lastData = Date.now(); phHello(); });
-    c.on("data", d => { if(c !== phConn) return; lastData = Date.now(); if(d && d.t) phMsg(d); else phApply(d, "peer"); });
-    const lost = () => { if(c !== phConn) return; phConn = null; retry(2000); };
-    c.on("close", lost);
-    c.on("error", lost);
-    // if it hasn't opened after 15s, try again
-    setTimeout(() => { if(c === phConn && !c.open){ try{ c.close(); }catch(e){} phConn = null; connect(); } }, 15000);
+    wireConn(c);
   };
   connect();
   // "Resync": throw away anything that might be stale and fetch the newest state both ways.
@@ -2338,7 +2459,7 @@ async function startPhone(){
   setInterval(() => {
     if(document.hidden) return;
     const overdue = phState && phState.running && Date.now() - phEnd > 4000;   // (the screen shows a prediction meanwhile)
-    const quiet = phConn && phConn.open && Date.now() - lastData > 25000;
+    const quiet = phConn && phConn.open && Date.now() - lastData > 25000 && !(cfOn() && phOffline);
     const lostSignal = phPeer && phPeer.disconnected && !phPeer.destroyed;
     if(overdue || quiet || lostSignal) phResync();
   }, 3000);
@@ -2891,7 +3012,12 @@ function loadNight(){
   if(Date.now() - (n.last || 0) > 8*3600*1000){ archive(n); store.set("fj-night", null); return; }   // last night was left open
   night = n; people = n.people;
   for(const p of Object.values(people)){ p.online = false; p.via = null; }
+  // photos are stored separately, so count them again (the count may not have been saved before a reload)
+  nightPhotos(n.id).then(list => { if(night && night.id === n.id && list.length !== night.photos){ night.photos = list.length; saveNight(true); renderCrew(); syncSoon(); } });
 }
+// closing or reloading the page: save tonight (and the timer) right now
+addEventListener("pagehide", () => { if(!SYNC && night) saveNight(true); });
+document.addEventListener("visibilitychange", () => { if(!SYNC && night && document.hidden) saveNight(true); });
 
 /* ----- people ----- */
 function upsertPerson(m, via){
@@ -2943,7 +3069,7 @@ function groupMsg(m, conn){
     case "photo": savePhoto(p, m); changed = false; break;
     default: return;
   }
-  if(changed){ night.last = Date.now(); saveNight(); renderCrew(); syncSoon(); }
+  if(changed){ night.last = Date.now(); saveNight(m.t === "done" || m.t === "hello"); renderCrew(); syncSoon(); }
 }
 function setAway(p, away){
   if(away && !p.away){ p.away = true; p.awaySince = Date.now(); }
@@ -3035,7 +3161,7 @@ function relayBody(){
 var inboxES = null;
 function startRelayInbox(){
   if(inboxES) try{ inboxES.close(); }catch(e){}
-  if(!gOn() || !S.syncCode) return;
+  if(!gOn() || !S.syncCode || cfOn()) return;
   const code = S.syncCode;
   try{ inboxES = new EventSource(RELAY() + "/" + relayTopic(code) + "-up/sse"); }catch(e){ return; }
   inboxES.onmessage = e => {
@@ -3131,7 +3257,7 @@ async function savePhoto(p, m){
   const thumb = await makeThumb(blob);
   try{ await idbDo("readwrite", st => st.put({id, night:night.id, from:p.id, name:p.name, emoji:p.emoji, ts:Date.now(), blob, thumb}), "photos"); }catch(e){ return; }
   night.photos++; delete collageCache[night.id];
-  night.last = Date.now(); saveNight(); renderCrew(); syncSoon();
+  night.last = Date.now(); saveNight(true); renderCrew(); syncSoon();
   gToast(`📸 ${p.emoji} ${escH(p.name)} added a photo`, m.data);
   if(!$("album").hidden && albumMode === "projector") albumOpen("projector");
 }
@@ -3172,7 +3298,7 @@ async function sendCollage(conn, nightId){
   const im = await createImageBitmap(c.blob), sc = Math.min(1, 1400/im.width), cv = document.createElement("canvas");
   cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
   cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
-  try{ conn.send({t:"collage", night:nightId, data:cv.toDataURL("image/jpeg", .82)}); }catch(e){}
+  try{ conn.send({t:"collage", night:nightId, data:await fitData(cv.toDataURL("image/jpeg", .82))}); }catch(e){}
 }
 // tiny zip writer (no compression; photos are already JPEG)
 function makeZip(files){
@@ -3250,6 +3376,7 @@ function renderGroupUI(){
   if(SYNC) return;
   ["gGoals","gJail","gStats","gPhotos"].forEach(k => $("s-"+k).checked = S[k]);
   $("s-roomName").value = S.roomName; $("s-jailGrace").value = String(S.jailGrace);
+  if(document.activeElement !== $("s-syncServer")) $("s-syncServer").value = S.syncServer;
   $("nightInfo").textContent = !gOn() ? "Turn on phone sync (Timer tab) and use your GitHub Pages link to use group features."
     : night ? `Started ${new Date(night.start).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})} · ${Object.keys(people).length} people · ${minsTxt(night.focusMs)} focused · ${night.photos} photos`
     : "A night starts when the first focus session starts or someone joins.";
@@ -3264,6 +3391,24 @@ function renderGroupUI(){
     : `<p class="hint" style="margin:0">People who join show up here after the night ends.</p>`;
 }
 ["gGoals","gJail","gStats","gPhotos"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); renderCrew(); syncSoon(); });
+$("s-syncServer").onchange = e => {
+  const h = normHost(e.target.value); e.target.value = h;
+  if(h === normHost(S.syncServer)) return;
+  S.syncServer = h; save(); startHost(); renderSyncBox();
+  $("srvMsg").textContent = h ? "Saved. The QR code changed, so phones need to scan it again." : "Using the free public services.";
+  if(h) testServer();
+};
+async function testServer(){
+  const h = normHost($("s-syncServer").value);
+  if(!h){ $("srvMsg").textContent = "Paste your server's address first."; return; }
+  $("srvMsg").textContent = "Checking…";
+  try{
+    const r = await fetch(`${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/health`, {cache:"no-store"});
+    const t = await r.text();
+    $("srvMsg").textContent = /Focus Jams/.test(t) ? "✅ Your sync server is working." : "That address answered, but it isn't a Focus Jams sync server.";
+  }catch(e){ $("srvMsg").textContent = "❌ Couldn't reach it. Check the address (it ends in .workers.dev)."; }
+}
+$("srvTest").onclick = testServer;
 $("s-roomName").oninput = e => { S.roomName = e.target.value; save(); };
 $("s-roomName").onchange = () => { if(night) night.room = roomName(); syncSoon(); };
 $("s-jailGrace").onchange = e => { S.jailGrace = +e.target.value; save(); syncSoon(); };
@@ -3394,6 +3539,7 @@ async function phCompress(file){
 }
 async function phSendPhotoData(data){
   const msg = t => $("phPhotoMsg").textContent = t;
+  data = await fitData(data);
   if(!(phConn && phConn.open)){ msg("Photos need a direct connection to the big screen. Try the same Wi-Fi as the projector, then reload."); return false; }
   msg("Sending…");
   if(!phSend({t:"photo", pid:me.id.slice(0, 8) + newCode(), data}, false)){ msg("Lost the connection. Try again in a moment."); return false; }
@@ -3406,7 +3552,7 @@ async function phSendPhotos(files){
   let sent = 0;
   for(const f of files){
     msg(`Sending ${sent + 1} of ${files.length}…`);
-    const data = await phCompress(f);
+    const data = await fitData(await phCompress(f));
     if(!data){ continue; }
     if(!phSend({t:"photo", pid:me.id.slice(0, 8) + newCode(), data}, false)){ msg("Lost the connection. Try again in a moment."); return; }
     sent++; phPhotoN++;
@@ -3415,6 +3561,7 @@ async function phSendPhotos(files){
   msg(sent ? `📸 Added ${sent} photo${sent === 1 ? "" : "s"} (${phPhotoN} from you tonight).` : "Couldn't read those photos.");
 }
 function phMsg(d){   // non-state messages from the projector
+  if(d.t === "_host"){ const back = d.on && phOffline; phOffline = !d.on; if(back) phHello(); return; }   // the sync server says whether the big screen is connected; say hi again when it's back
   if(phAlbumMsg(d)) return;
   if(d && d.t === "collage" && d.night){
     phCollage[d.night] = d.data;
@@ -3533,7 +3680,7 @@ async function sendAlbum(conn, nightId, since){
 async function sendFullPhoto(conn, photoId){
   try{
     const ph = await idbDo("readonly", st => st.get(String(photoId)), "photos");
-    if(ph) conn.send({t:"photoFull", id:ph.id, data:await blobToData(ph.blob)});
+    if(ph) conn.send({t:"photoFull", id:ph.id, data:await fitData(await blobToData(ph.blob))});
   }catch(e){}
 }
 function albumRender(){
@@ -3701,9 +3848,11 @@ document.addEventListener("keydown", e => {
 /* ================= start up ================= */
 (async function init(){
   if(SYNC) return startPhone();
+  const resume = restoreTimer();
   startHost();
   renderChips();
   render();
+  if(resume) start();   // it was running before the reload: keep going
   await handleRedirect();
   setSource(S.src);
 })();
