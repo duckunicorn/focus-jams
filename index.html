@@ -207,6 +207,9 @@
   select{background:var(--panel2);border:1px solid var(--line);color:var(--ink);font:14px "Space Grotesk",system-ui,sans-serif;padding:9px 10px;border-radius:12px;width:100%}
   select option{background:var(--panel-solid);color:var(--ink)}
   .testrow{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .sndrow{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:14px}
+  .sndrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sndrow .tag{font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em}
 
   /* phone sync */
   .sync-row{display:flex;gap:14px;align-items:center}
@@ -474,6 +477,12 @@
           <label>Volume<input type="range" id="s-volume" min="0" max="100"></label>
           <label>Play it<select id="s-repeat"><option value="1">Once</option><option value="2">Twice</option><option value="3">3 times</option></select></label>
         </div>
+        <div class="testrow">
+          <label class="ghost sm">⬆ Upload a focus-end sound<input type="file" id="sndFileFocus" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm" hidden></label>
+          <label class="ghost sm">⬆ Upload a break-end sound<input type="file" id="sndFileBreak" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm" hidden></label>
+        </div>
+        <p class="hint" id="sndMsg" style="margin:6px 0 0">Use your own MP3, WAV, M4A or OGG (up to 10 MB). Custom sounds play for up to 30 seconds and are saved in this browser only.</p>
+        <div id="sndList"></div>
         <div class="testrow" style="margin-bottom:6px">
           <button class="ghost sm" id="syncNew">New phone sync code</button>
         </div>
@@ -895,7 +904,11 @@ function hideEndMsg(){ clearTimeout(endMsgT); $("endMsgBox").classList.remove("o
 
 /* ================= sound + notifications ================= */
 let actx = null, pendingSnd = null;
-function unlockAudio(){ try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){} }
+function unlockAudio(){
+  const first = !actx;
+  try{ actx = actx || new (window.AudioContext||window.webkitAudioContext)(); actx.resume(); }catch(e){}
+  if(first && actx && typeof decodeAllCustom === "function") decodeAllCustom();
+}
 const soundFor = m => m === "focus" ? S.focusSound : S.breakSound;
 function tone(out, f, t, dur, type = "sine", peak = .4, attack = .01){
   const o = actx.createOscillator(), g = actx.createGain();
@@ -916,14 +929,93 @@ const SOUNDS = {
   none:    {name:"No sound",        len:0,   play:()=>{}},
 };
 // Plays a sound now, or at a future audio-clock time. Returns its output node so it can be cancelled.
+const CUSTOM_MAX_SECS = 30;
 function playSound(name, when, reps = S.repeat){
-  if(!actx || name === "none" || !SOUNDS[name]) return null;
+  if(!actx || !name || name === "none") return null;
+  const t0 = when ?? actx.currentTime + .03;
+  if(name.startsWith("custom:")){
+    const cs = customSounds[name.slice(7)];
+    if(!cs) return null;
+    if(!cs.buffer){ decodeCustom(cs).then(() => { if(when === undefined) playSound(name, undefined, reps); }); return null; }
+    const out = actx.createGain();
+    out.gain.value = S.volume/100;
+    out.connect(actx.destination);
+    const len = Math.min(cs.buffer.duration, CUSTOM_MAX_SECS);
+    for(let r = 0; r < reps; r++){
+      const src = actx.createBufferSource(); src.buffer = cs.buffer; src.connect(out);
+      const st = t0 + r*(len + .5);
+      src.start(st); src.stop(st + len);
+    }
+    return out;   // disconnecting this cancels it (pause/reset)
+  }
+  if(!SOUNDS[name]) return null;
   const out = actx.createGain();
   out.gain.value = (S.volume/100) * 1.4;
   out.connect(actx.destination);
-  const s = SOUNDS[name], t0 = when ?? actx.currentTime + .03;
+  const s = SOUNDS[name];
   for(let r = 0; r < reps; r++) s.play(out, t0 + r*(s.len + .5));
   return out;
+}
+
+/* ----- custom sounds: stored in this browser (IndexedDB), decoded when audio is unlocked ----- */
+var customSounds = {}, customLoaded = false;   // id -> {id, name, blob, buffer}
+function idb(){
+  return new Promise((res, rej) => {
+    try{
+      const r = indexedDB.open("focusjams", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("sounds", {keyPath:"id"});
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }catch(e){ rej(e); }
+  });
+}
+async function idbDo(mode, fn){
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction("sounds", mode), st = tx.objectStore("sounds"), r = fn(st);
+    tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error);
+  });
+}
+async function decodeCustom(cs){
+  if(cs.buffer || !actx) return cs.buffer;
+  try{ cs.buffer = await actx.decodeAudioData(await cs.blob.arrayBuffer()); }
+  catch(e){ cs.bad = true; }
+  return cs.buffer;
+}
+async function decodeAllCustom(){
+  await Promise.all(Object.values(customSounds).map(decodeCustom));
+  if(running && !pendingSnd) scheduleEndSound();   // a custom end sound is now ready to be lined up
+}
+async function loadCustomSounds(){
+  try{ (await idbDo("readonly", st => st.getAll()) || []).forEach(r => customSounds[r.id] = {id:r.id, name:r.name, blob:r.blob, buffer:null}); }
+  catch(e){}
+  customLoaded = true;
+  renderSoundUI();
+  if(actx) decodeAllCustom();
+}
+async function addCustomSound(file, kind){
+  const msg = t => $("sndMsg").textContent = t;
+  if(!file) return;
+  if(file.size > 10*1024*1024){ msg("That file is over 10 MB. Try a shorter clip."); return; }
+  unlockAudio();
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const cs = {id, name:file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "My sound", blob:file, buffer:null};
+  if(!(await decodeCustom(cs))){ msg("Couldn't play that file. Try an MP3 or WAV."); return; }
+  customSounds[id] = cs;
+  let saved = true;
+  try{ await idbDo("readwrite", st => st.put({id, name:cs.name, blob:file})); }catch(e){ saved = false; }
+  S[kind === "focus" ? "focusSound" : "breakSound"] = "custom:" + id; save();
+  renderSoundUI(); scheduleEndSound();
+  playSound("custom:" + id, undefined, 1);
+  msg(saved ? `Added “${cs.name}” as the ${kind === "focus" ? "focus" : "break"}-end sound.` + (cs.buffer.duration > CUSTOM_MAX_SECS ? ` It's long, so only the first ${CUSTOM_MAX_SECS} seconds will play.` : "")
+            : "Added for now, but this browser won't keep it after a reload (private window?).");
+}
+async function removeCustomSound(id){
+  delete customSounds[id];
+  try{ await idbDo("readwrite", st => st.delete(id)); }catch(e){}
+  if(S.focusSound === "custom:" + id) S.focusSound = DEF.focusSound;
+  if(S.breakSound === "custom:" + id) S.breakSound = DEF.breakSound;
+  save(); renderSoundUI(); scheduleEndSound();
+  $("sndMsg").textContent = "Sound removed.";
 }
 function cancelSound(){ if(pendingSnd){ try{ pendingSnd.disconnect(); }catch(e){} pendingSnd = null; } }
 function scheduleEndSound(){
@@ -931,8 +1023,20 @@ function scheduleEndSound(){
   if(actx && running) pendingSnd = playSound(soundFor(mode), actx.currentTime + Math.max(0, (endAt - Date.now())/1000));
 }
 function renderSoundUI(){
-  const opts = Object.entries(SOUNDS).map(([k,s]) => `<option value="${k}">${s.name}</option>`).join("");
-  ["focusSound","breakSound"].forEach(k => { $("s-"+k).innerHTML = opts; $("s-"+k).value = S[k]; });
+  const esc = t => t.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const mine = Object.values(customSounds);
+  let opts = `<optgroup label="Built-in">` + Object.entries(SOUNDS).map(([k,s]) => `<option value="${k}">${s.name}</option>`).join("") + `</optgroup>`;
+  if(mine.length) opts += `<optgroup label="Your sounds">` + mine.map(c => `<option value="custom:${c.id}">🎵 ${esc(c.name)}</option>`).join("") + `</optgroup>`;
+  ["focusSound","breakSound"].forEach(k => {
+    // a saved custom sound that no longer exists falls back to the default
+    if(S[k].startsWith("custom:") && !customSounds[S[k].slice(7)] && customLoaded) S[k] = DEF[k];
+    $("s-"+k).innerHTML = opts; $("s-"+k).value = S[k];
+  });
+  $("sndList").innerHTML = mine.map(c => {
+    const uses = [S.focusSound === "custom:"+c.id ? "focus end" : "", S.breakSound === "custom:"+c.id ? "break end" : ""].filter(Boolean).join(" · ");
+    return `<div class="sndrow"><span class="nm">🎵 ${esc(c.name)} ${uses ? `<span class="tag">${uses}</span>` : ""}</span>
+      <button class="ghost sm" data-play="${c.id}">▶</button><button class="ghost sm" data-del="${c.id}">Remove</button></div>`;
+  }).join("");
   $("s-volume").value = S.volume; $("s-repeat").value = String(S.repeat);
 }
 function notify(msg){
@@ -1242,8 +1346,16 @@ $("npPrev").onclick = () => appCmd("POST", "/me/player/previous");
 /* sounds */
 renderSoundUI();
 ["focusSound","breakSound"].forEach(k => $("s-"+k).onchange = e => {
-  S[k] = e.target.value; save(); unlockAudio(); playSound(S[k], undefined, 1); scheduleEndSound();
+  S[k] = e.target.value; save(); unlockAudio(); playSound(S[k], undefined, 1); scheduleEndSound(); renderSoundUI();
 });
+$("sndFileFocus").onchange = e => { addCustomSound(e.target.files[0], "focus"); e.target.value = ""; };
+$("sndFileBreak").onchange = e => { addCustomSound(e.target.files[0], "break"); e.target.value = ""; };
+$("sndList").onclick = e => {
+  const pl = e.target.closest("[data-play]"), dl = e.target.closest("[data-del]");
+  if(pl){ unlockAudio(); playSound("custom:" + pl.dataset.play, undefined, 1); }
+  if(dl) removeCustomSound(dl.dataset.del);
+};
+if(!SYNC) loadCustomSounds();
 $("s-volume").oninput = e => { S.volume = +e.target.value; };
 $("s-volume").onchange = () => { save(); unlockAudio(); playSound(S.focusSound === "none" ? S.breakSound : S.focusSound, undefined, 1); scheduleEndSound(); };
 $("s-repeat").onchange = e => { S.repeat = +e.target.value; save(); scheduleEndSound(); };
