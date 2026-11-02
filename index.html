@@ -338,6 +338,12 @@
   .ph-photo-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .ph-photo-btns > *{text-align:center;text-decoration:none}
 
+  /* face-down mode: pure black so OLED phones use almost no power */
+  .phdown{position:fixed;inset:0;z-index:20;background:#000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#333;font:500 15px "Space Grotesk",system-ui,sans-serif}
+  .phdown[hidden]{display:none}
+  .phdown b{font-size:40px}
+  .ph-down{margin-top:10px;font-size:13px;color:var(--muted)}
+
   /* phone view (?sync=CODE) */
   body.phone .wrap{display:none}
   #phone{max-width:460px;margin:0 auto;padding:18px 16px 40px;min-height:100vh;display:flex;flex-direction:column;gap:16px}
@@ -513,6 +519,9 @@
   </div>
 </div>
 
+<!-- FACE DOWN -->
+<div class="phdown" id="phDown" hidden><b>🙃</b>Phone down. Nice.<span style="font-size:12px">Pick it up to see the timer</span></div>
+
 <!-- CAMERA -->
 <div class="cam" id="cam" hidden>
   <video id="camVid" playsinline muted autoplay></video>
@@ -598,6 +607,10 @@
     </div>
     <div class="ph-stat" id="phStats" hidden></div>
     <div class="ph-jail" id="phJail" hidden></div>
+    <div class="ph-down" id="phDownBox" hidden>
+      <span id="phDownTxt">🙃 Face-down mode: lay your phone face down and the screen goes dark. It still counts as focusing, so no phone jail.</span>
+      <button class="ghost sm" id="phDownBtn" hidden style="margin-top:8px;width:100%">🙃 Turn on face-down mode</button>
+    </div>
     <div id="phPhotoBox" hidden style="margin-top:12px">
       <div class="ph-photo-btns">
         <button class="big sm" id="phCamBtn">📷 Take a photo</button>
@@ -2667,7 +2680,8 @@ function groupMsg(m, conn){
       celebrate(`🎉 ${p.emoji} ${escH(p.name)} finished: ${escH(p.goal)}`);
       break;
     case "away": setAway(p, !!m.away); break;
-    case "bye": p.online = false; p.away = false; p.jailed = false; break;
+    case "down": p.down = !!m.down; break;
+    case "bye": p.online = false; p.away = false; p.jailed = false; p.down = false; break;
     case "ping": changed = false; break;
     case "photo": savePhoto(p, m); changed = false; break;
     default: return;
@@ -2780,7 +2794,8 @@ function renderCrew(){
   $("crewList").innerHTML = list.map(p => {
     const goal = !S.gGoals ? "" : p.goal ? `<div class="gl ${p.goalDone ? "done" : ""}">${p.goalDone ? "✅ " : "🎯 "}${escH(p.goal)}</div>` : `<div class="gl">no goal yet</div>`;
     const stat = S.gStats ? `<span class="mn">${minsTxt(p.focusMs)}${p.goalsDone ? ` · ✅${p.goalsDone}` : ""}</span>` : `<span class="mn">${p.goalsDone && S.gGoals ? "✅" + p.goalsDone : ""}</span>`;
-    return `<div class="crew-row ${isOnline(p) ? "" : "off"}"><span class="em">${p.jailed ? "📵" : p.emoji}</span><div style="min-width:0"><div class="nm">${escH(p.name)}</div>${goal}</div>${stat}</div>`;
+    const down = S.gJail && p.down && !p.away ? ` <span title="Phone face down">🙃</span>` : "";
+    return `<div class="crew-row ${isOnline(p) ? "" : "off"}"><span class="em">${p.jailed ? "📵" : p.emoji}</span><div style="min-width:0"><div class="nm">${escH(p.name)}${down}</div>${goal}</div>${stat}</div>`;
   }).join("");
 }
 (function crewAutoScroll(){
@@ -3020,8 +3035,9 @@ function phGroupRender(g){
   // phone jail
   $("phJail").hidden = !g.f.jail;
   if(g.f.jail) $("phJail").innerHTML = mine && mine.j ? "📵 <b>You're in phone jail!</b> Stay on this page to get out."
-    : `📵 Phone jail is on: during focus, leaving this page for more than ${g.grace}s puts your name on the big screen. Put your phone face down instead of locking it.` + (mine && mine.v ? ` (Visits tonight: ${mine.v})` : "");
+    : `📵 Phone jail is on: during focus, leaving this page for more than ${g.grace}s puts your name on the big screen. Don't lock your phone; put it face down instead (it stays awake).` + (mine && mine.v ? ` (Visits tonight: ${mine.v})` : "");
   phWake(g.f.jail);
+  phDownSetup(g.f.jail);
   // photos
   $("phPhotoBox").hidden = !g.f.photos;
   // recap
@@ -3132,6 +3148,59 @@ if(SYNC){
   addEventListener("pagehide", () => { if(me.name) phSend({t:"bye"}, false); });
   // keep relay-only phones counted as "here"
   setInterval(() => { if(me.name && phG && !(phConn && phConn.open)) phSend({t:"ping"}); }, 25000);
+}
+
+/* ----- face-down mode (phones) ----- */
+// Lying flat face down = front/back tilt (beta) near ±180° and little side tilt (gamma).
+var phDownOn = false, phDownListening = false, phIsDown = false, phDownSince = 0, phUpSince = 0, phOrientSeen = false;
+function phOrient(e){
+  if(e.beta == null) return;
+  if(!phOrientSeen){ phOrientSeen = true; $("phDownBtn").hidden = true; }   // the sensor works: no need to ask
+  const faceDown = Math.abs(e.beta) > 150 && Math.abs(e.gamma || 0) < 30;
+  const now = Date.now();
+  if(faceDown){ phUpSince = 0; if(!phDownSince) phDownSince = now; }
+  else { phDownSince = 0; if(!phUpSince) phUpSince = now; }
+  // short delays so a quick wobble doesn't flicker it on or off
+  if(!phIsDown && faceDown && now - phDownSince > 1200) phSetDown(true);
+  else if(phIsDown && !faceDown && now - phUpSince > 300) phSetDown(false);
+}
+function phSetDown(down){
+  phIsDown = down;
+  $("phDown").hidden = !down;
+  if(me.name) phSend({t:"down", down});
+  if(navigator.vibrate) navigator.vibrate(down ? 30 : [20, 40, 20]);
+}
+function phDownListen(){
+  if(phDownListening) return;
+  phDownListening = true;
+  addEventListener("deviceorientation", phOrient);
+  // No readings after a moment: either the phone wants permission first (iPhones), or there's no sensor (laptops).
+  setTimeout(() => {
+    if(phOrientSeen || !phDownOn) return;
+    if(typeof DeviceOrientationEvent.requestPermission === "function") $("phDownBtn").hidden = false;
+    else $("phDownTxt").textContent = "Face-down mode isn't available on this device.";
+  }, 2500);
+}
+function phDownSetup(on){
+  phDownOn = on;
+  const supported = "DeviceOrientationEvent" in window;
+  $("phDownBox").hidden = !on || !supported;
+  if(!on){ if(phIsDown) phSetDown(false); return; }
+  if(!supported) return;
+  // Start listening right away (Android works without asking). If nothing arrives, phDownListen offers the
+  // "Turn on" button, which asks for permission on iPhones.
+  if(phOrientSeen) $("phDownBtn").hidden = true;
+  phDownListen();
+}
+if(SYNC){
+  $("phDownBtn").onclick = async () => {
+    try{
+      const r = await DeviceOrientationEvent.requestPermission();
+      if(r === "granted"){ $("phDownBtn").hidden = true; $("phDownTxt").textContent = "🙃 Face-down mode is on: lay your phone face down and the screen goes dark. It still counts as focusing."; }
+      else $("phDownTxt").textContent = "Motion access was blocked, so face-down mode can't work. Keep this page open instead.";
+    }catch(e){ $("phDownBtn").hidden = true; }
+  };
+  $("phDown").onclick = () => phSetDown(false);   // a tap brings the page back too
 }
 
 /* ================= camera: phones and the projector's photo booth ================= */
