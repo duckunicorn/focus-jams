@@ -210,6 +210,12 @@
   .sndrow{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:14px}
   .sndrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .sndrow .tag{font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:.08em}
+  .sndcard{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:6px 12px 10px;margin-top:8px}
+  .sndcard .sndrow{margin-top:2px}
+  .sndtrim{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;margin-top:6px}
+  .sndtrim label{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  .sndtrim label b{color:var(--ink);font-weight:600}
+  @media (max-width:500px){ .sndtrim{grid-template-columns:1fr} }
 
   /* phone sync */
   .sync-row{display:flex;gap:14px;align-items:center}
@@ -481,7 +487,7 @@
           <label class="ghost sm">⬆ Upload a focus-end sound<input type="file" id="sndFileFocus" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm" hidden></label>
           <label class="ghost sm">⬆ Upload a break-end sound<input type="file" id="sndFileBreak" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac,.webm" hidden></label>
         </div>
-        <p class="hint" id="sndMsg" style="margin:6px 0 0">Use your own MP3, WAV, M4A or OGG (up to 10 MB). Custom sounds play for up to 30 seconds and are saved in this browser only.</p>
+        <p class="hint" id="sndMsg" style="margin:6px 0 0">Use your own MP3, WAV, M4A or OGG (up to 10 MB), saved in this browser only. Pick which part plays and for how long (up to 2 minutes) below.</p>
         <div id="sndList"></div>
         <div class="testrow" style="margin-bottom:6px">
           <button class="ghost sm" id="syncNew">New phone sync code</button>
@@ -929,7 +935,14 @@ const SOUNDS = {
   none:    {name:"No sound",        len:0,   play:()=>{}},
 };
 // Plays a sound now, or at a future audio-clock time. Returns its output node so it can be cancelled.
-const CUSTOM_MAX_SECS = 30;
+const CUSTOM_DEFAULT_SECS = 30, CUSTOM_MAX_SECS = 120;
+// how much of a custom sound plays: from cs.start for cs.len seconds (clamped to the file)
+function customSpan(cs){
+  const dur = cs.buffer ? cs.buffer.duration : 0;
+  const start = Math.max(0, Math.min(+cs.start || 0, Math.max(0, dur - .1)));
+  const len = Math.max(.2, Math.min(+cs.len || CUSTOM_DEFAULT_SECS, CUSTOM_MAX_SECS, dur - start));
+  return {start, len, dur};
+}
 function playSound(name, when, reps = S.repeat){
   if(!actx || !name || name === "none") return null;
   const t0 = when ?? actx.currentTime + .03;
@@ -940,11 +953,14 @@ function playSound(name, when, reps = S.repeat){
     const out = actx.createGain();
     out.gain.value = S.volume/100;
     out.connect(actx.destination);
-    const len = Math.min(cs.buffer.duration, CUSTOM_MAX_SECS);
+    const {start, len} = customSpan(cs), fade = Math.min(.35, len/4);
     for(let r = 0; r < reps; r++){
-      const src = actx.createBufferSource(); src.buffer = cs.buffer; src.connect(out);
-      const st = t0 + r*(len + .5);
-      src.start(st); src.stop(st + len);
+      const src = actx.createBufferSource(), g = actx.createGain(), st = t0 + r*(len + .5);
+      src.buffer = cs.buffer; src.connect(g).connect(out);
+      // quick fade in/out so a clip cut from the middle of a file doesn't click
+      g.gain.setValueAtTime(0, st); g.gain.linearRampToValueAtTime(1, st + .015);
+      g.gain.setValueAtTime(1, st + len - fade); g.gain.linearRampToValueAtTime(0, st + len);
+      src.start(st, start, len); src.stop(st + len + .05);
     }
     return out;   // disconnecting this cancels it (pause/reset)
   }
@@ -983,10 +999,11 @@ async function decodeCustom(cs){
 }
 async function decodeAllCustom(){
   await Promise.all(Object.values(customSounds).map(decodeCustom));
+  if(!document.activeElement || !document.activeElement.matches("[data-trim]")) renderSoundUI();
   if(running && !pendingSnd) scheduleEndSound();   // a custom end sound is now ready to be lined up
 }
 async function loadCustomSounds(){
-  try{ (await idbDo("readonly", st => st.getAll()) || []).forEach(r => customSounds[r.id] = {id:r.id, name:r.name, blob:r.blob, buffer:null}); }
+  try{ (await idbDo("readonly", st => st.getAll()) || []).forEach(r => customSounds[r.id] = {id:r.id, name:r.name, blob:r.blob, buffer:null, start:r.start || 0, len:r.len || CUSTOM_DEFAULT_SECS}); }
   catch(e){}
   customLoaded = true;
   renderSoundUI();
@@ -998,16 +1015,24 @@ async function addCustomSound(file, kind){
   if(file.size > 10*1024*1024){ msg("That file is over 10 MB. Try a shorter clip."); return; }
   unlockAudio();
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const cs = {id, name:file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "My sound", blob:file, buffer:null};
+  const cs = {id, name:file.name.replace(/\.[^.]+$/, "").slice(0, 60) || "My sound", blob:file, buffer:null, start:0, len:CUSTOM_DEFAULT_SECS};
   if(!(await decodeCustom(cs))){ msg("Couldn't play that file. Try an MP3 or WAV."); return; }
   customSounds[id] = cs;
   let saved = true;
-  try{ await idbDo("readwrite", st => st.put({id, name:cs.name, blob:file})); }catch(e){ saved = false; }
+  cs.len = Math.min(CUSTOM_DEFAULT_SECS, cs.buffer.duration);
+  try{ await idbDo("readwrite", st => st.put({id, name:cs.name, blob:file, start:cs.start, len:cs.len})); }catch(e){ saved = false; }
   S[kind === "focus" ? "focusSound" : "breakSound"] = "custom:" + id; save();
   renderSoundUI(); scheduleEndSound();
   playSound("custom:" + id, undefined, 1);
-  msg(saved ? `Added “${cs.name}” as the ${kind === "focus" ? "focus" : "break"}-end sound.` + (cs.buffer.duration > CUSTOM_MAX_SECS ? ` It's long, so only the first ${CUSTOM_MAX_SECS} seconds will play.` : "")
+  msg(saved ? `Added “${cs.name}” as the ${kind === "focus" ? "focus" : "break"}-end sound.` + (cs.buffer.duration > cs.len + .05 ? ` It plays the first ${fmtSecs(cs.len)}. Change that below.` : "")
             : "Added for now, but this browser won't keep it after a reload (private window?).");
+}
+const fmtSecs = x => (Math.round(x*10)/10) + "s";
+var trimSaveT = {};
+function saveTrim(cs){
+  clearTimeout(trimSaveT[cs.id]);
+  trimSaveT[cs.id] = setTimeout(() => { idbDo("readwrite", st => st.put({id:cs.id, name:cs.name, blob:cs.blob, start:cs.start, len:cs.len})).catch(() => {}); }, 400);
+  if(running) scheduleEndSound();
 }
 async function removeCustomSound(id){
   delete customSounds[id];
@@ -1034,8 +1059,15 @@ function renderSoundUI(){
   });
   $("sndList").innerHTML = mine.map(c => {
     const uses = [S.focusSound === "custom:"+c.id ? "focus end" : "", S.breakSound === "custom:"+c.id ? "break end" : ""].filter(Boolean).join(" · ");
-    return `<div class="sndrow"><span class="nm">🎵 ${esc(c.name)} ${uses ? `<span class="tag">${uses}</span>` : ""}</span>
-      <button class="ghost sm" data-play="${c.id}">▶</button><button class="ghost sm" data-del="${c.id}">Remove</button></div>`;
+    const sp = customSpan(c), dur = sp.dur, maxLen = Math.max(.5, Math.min(CUSTOM_MAX_SECS, dur - sp.start));
+    const trim = !c.buffer ? `<div class="sndtrim hint">Click anywhere on the page once to load this sound's length controls.</div>` : `
+      <div class="sndtrim">
+        <label>Start at <b data-v="start">${fmtSecs(sp.start)}</b><input type="range" data-trim="start" data-id="${c.id}" min="0" max="${Math.max(0, dur - .5).toFixed(1)}" step="0.1" value="${sp.start.toFixed(1)}"></label>
+        <label>Length <b data-v="len">${fmtSecs(sp.len)}</b><input type="range" data-trim="len" data-id="${c.id}" min="0.5" max="${maxLen.toFixed(1)}" step="0.1" value="${sp.len.toFixed(1)}"></label>
+        <span class="hint">of ${fmtSecs(dur)}</span>
+      </div>`;
+    return `<div class="sndcard"><div class="sndrow"><span class="nm">🎵 ${esc(c.name)} ${uses ? `<span class="tag">${uses}</span>` : ""}</span>
+      <button class="ghost sm" data-play="${c.id}">▶</button><button class="ghost sm" data-del="${c.id}">Remove</button></div>${trim}</div>`;
   }).join("");
   $("s-volume").value = S.volume; $("s-repeat").value = String(S.repeat);
 }
@@ -1350,6 +1382,24 @@ renderSoundUI();
 });
 $("sndFileFocus").onchange = e => { addCustomSound(e.target.files[0], "focus"); e.target.value = ""; };
 $("sndFileBreak").onchange = e => { addCustomSound(e.target.files[0], "break"); e.target.value = ""; };
+$("sndList").oninput = e => {
+  const r = e.target.closest("[data-trim]"); if(!r) return;
+  const cs = customSounds[r.dataset.id]; if(!cs || !cs.buffer) return;
+  cs[r.dataset.trim] = +r.value;
+  const sp = customSpan(cs), card = r.closest(".sndcard"), lenR = card.querySelector('[data-trim="len"]');
+  // keep the length slider within what's left of the file after the start point
+  lenR.max = Math.max(.5, Math.min(CUSTOM_MAX_SECS, sp.dur - sp.start)).toFixed(1);
+  if(+lenR.value > +lenR.max){ lenR.value = lenR.max; cs.len = +lenR.max; }
+  card.querySelector('[data-v="start"]').textContent = fmtSecs(customSpan(cs).start);
+  card.querySelector('[data-v="len"]').textContent = fmtSecs(customSpan(cs).len);
+  saveTrim(cs);
+};
+var trimPreview = null;
+$("sndList").onchange = e => {
+  const r = e.target.closest("[data-trim]"); if(!r) return;
+  unlockAudio(); if(trimPreview) try{ trimPreview.disconnect(); }catch(err){}
+  trimPreview = playSound("custom:" + r.dataset.id, undefined, 1);
+};
 $("sndList").onclick = e => {
   const pl = e.target.closest("[data-play]"), dl = e.target.closest("[data-del]");
   if(pl){ unlockAudio(); playSound("custom:" + pl.dataset.play, undefined, 1); }
