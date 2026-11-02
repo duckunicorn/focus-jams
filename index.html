@@ -410,6 +410,15 @@
     <a class="big btnlink" id="phJam" href="#" target="_blank" rel="noopener" hidden style="color:var(--accent-ink)">🎧 Join the Jam on Spotify</a>
     <button class="ghost" id="phLyr" hidden>🎤 Lyrics &amp; karaoke</button>
   </div>
+  <div class="card" id="phHelp" hidden>
+    <b>Can't reach the big screen?</b>
+    <ul class="hint" style="margin:8px 0 0;padding-left:18px;line-height:1.6">
+      <li>Make sure the Focus Jams page is open on the projector.</li>
+      <li>Open this link in Safari or Chrome. Apps like Instagram or Snapchat open links in their own browser, which can block this.</li>
+      <li>Turn off any VPN or ad blocker, or try switching between Wi-Fi and mobile data.</li>
+      <li>Still stuck? Scan the code again, or ask whoever runs the projector for a new code.</li>
+    </ul>
+  </div>
   <p class="hint center-t">This page follows the big screen live. Keep it open.</p>
 </div>
 
@@ -1409,14 +1418,36 @@ function syncState(){
     remaining: running ? Math.max(0, endAt - Date.now()) : remaining*1000, total: total(mode)*1000,
     cycle, every:S.every, done:stats.done, colors:c,
     song: curTrack && curTrack.name ? {uri:curTrack.uri, name:curTrack.name, artist:curTrack.artist || "", art:curTrack.art || ""} : null,
-    playing, jam:S.jamLink};
+    playing, jam:S.jamLink, t:Date.now(), endEpoch: running ? endAt : 0};
 }
 function broadcast(){
   if(!syncReady || !conns.size) return;
   const st = syncState();
   conns.forEach(c => { try{ if(c.open) c.send(st); }catch(e){} });
 }
-function syncSoon(){ if(!SYNC && typeof broadcast === "function"){ clearTimeout(syncT); syncT = setTimeout(broadcast, 150); } }
+function syncSoon(){ if(!SYNC && typeof broadcast === "function"){ clearTimeout(syncT); syncT = setTimeout(() => { broadcast(); relayPublish(); }, 150); } }
+
+// Backup path for phones that can't connect directly (blocked networks, ad blockers, VPNs...):
+// the projector posts each *change* to a free relay (ntfy.sh) and phones listen to it like a normal website.
+// Only changes are sent (not a steady heartbeat) to stay well inside the relay's free limits.
+var relayLastKey = "", relayLastAt = 0, relayT = null, relayBackoff = 0;
+const RELAY = () => window.FJ_RELAY || "https://ntfy.sh";
+const relayTopic = code => "focusjams-" + code;
+function relayKey(st){
+  return JSON.stringify([st.mode, st.running, st.running ? Math.round(st.endEpoch/1000) : Math.round(st.remaining/1000),
+    st.cycle, st.every, st.done, st.colors, st.song && st.song.uri, st.song && st.song.name, st.song && st.song.art, st.playing, st.jam]);
+}
+function relayPublish(force){
+  if(SYNC || !S.phoneSync || LOCAL_ONLY || !S.syncCode) return;
+  const st = syncState(), key = relayKey(st);
+  if(!force && key === relayLastKey) return;
+  const wait = Math.max(relayLastAt + 3000, relayBackoff) - Date.now();   // at most one post every 3s
+  if(wait > 0){ clearTimeout(relayT); relayT = setTimeout(() => relayPublish(force), wait); return; }
+  relayLastKey = key; relayLastAt = Date.now();
+  fetch(RELAY() + "/" + relayTopic(S.syncCode), {method:"POST", body:JSON.stringify(syncState())})
+    .then(r => { if(r.status === 429){ relayLastKey = ""; relayBackoff = Date.now() + 60000; relayPublish(); } })
+    .catch(() => { relayLastKey = ""; relayBackoff = Date.now() + 15000; relayPublish(); });
+}
 function renderSyncBox(){
   const on = S.phoneSync && !LOCAL_ONLY;
   $("syncBox").hidden = !on;
@@ -1441,6 +1472,7 @@ async function startHost(){
   stopHost(); renderSyncBox();
   if(!S.phoneSync || LOCAL_ONLY) return;
   if(!S.syncCode){ S.syncCode = newCode(); save(); renderSyncBox(); }
+  relayLastKey = ""; relayPublish(true);
   try{ await loadPeerJs(); }catch(e){ $("syncCount").textContent = "Couldn't load phone sync"; return; }
   const p = peer = new Peer(PEER_PREFIX + S.syncCode, peerOpts());
   p.on("open", () => { if(p !== peer) return; syncReady = true; renderSyncBox(); });
@@ -1480,11 +1512,16 @@ setInterval(broadcast, 10000);   // heartbeat keeps phones' clocks lined up
 /* ----- phone side ----- */
 var phState = null, phEnd = 0, phConn = null, phPeer = null, phRetry = null, phLastMode = null;
 function phSetStatus(t, live){ $("phStatus").textContent = t; $("phLive").classList.toggle("on", !!live); }
-function phApply(st){
+var phLastT = 0, phGotData = 0, relayOpen = false, phSince = Date.now();
+function phApply(st, via){
   if(!st || st.v !== 1) return;
+  if(st.t && st.t <= phLastT) return;     // already have something newer from the other path
+  phLastT = st.t || 0; phGotData = Date.now();
+  $("phHelp").hidden = true;
   if(phLastMode && st.mode !== phLastMode && navigator.vibrate) navigator.vibrate([250, 120, 250]);
   phLastMode = st.mode; phState = st;
-  phEnd = Date.now() + st.remaining;
+  // direct updates arrive instantly, so count down from "now"; relay updates may be older, so use the absolute end time
+  phEnd = via === "relay" && st.running && st.endEpoch ? st.endEpoch : Date.now() + st.remaining;
   const r = document.documentElement.style, c = st.colors;
   r.setProperty("--bg", c.bg); r.setProperty("--ink", c.ink); r.setProperty("--accent", c.accent); r.setProperty("--accent-ink", c.accentInk);
   r.colorScheme = lum(c.bg) > .3 ? "light" : "dark";
@@ -1509,20 +1546,44 @@ function phTick(){
   $("phProg").style.strokeDashoffset = C * (1 - rem/phState.total);
   document.title = fmt(rem/1000) + " · " + phState.label;
 }
+function startRelay(){
+  let es;
+  const open = () => {
+    try{ es = new EventSource(RELAY() + "/" + relayTopic(SYNC) + "/sse?since=latest"); }catch(e){ return; }
+    es.onopen = () => { relayOpen = true; };
+    es.onmessage = e => {
+      relayOpen = true;
+      let m; try{ m = JSON.parse(e.data); }catch(err){ return; }
+      if(m.event !== "message" || !m.message) return;
+      let st; try{ st = JSON.parse(m.message); }catch(err){ return; }
+      phApply(st, "relay");
+    };
+    es.onerror = () => {
+      relayOpen = false;
+      if(es.readyState === 2){ setTimeout(open, 10000); }   // closed for good: start over in a bit
+    };
+  };
+  open();
+}
 async function startPhone(){
   document.body.classList.add("phone");
   $("phone").hidden = false;
   $("phProg").style.strokeDasharray = C;
   setInterval(phTick, 250);
   $("phLyr").onclick = () => { curTrack = phState.song; fillLyrics(); $("lyr").showModal(); };
-  try{ await loadPeerJs(); }catch(e){ phSetStatus("Couldn't load — refresh", false); return; }
+  startRelay();
+  setInterval(() => {   // still nothing after 15s: show tips
+    if(!phGotData && Date.now() - phSince > 15000) $("phHelp").hidden = false;
+  }, 1000);
+  let peerOk = true;
+  try{ await loadPeerJs(); }catch(e){ peerOk = false; }
   // Status only says "Reconnecting" if we've been without the screen for a few seconds, so brief blips don't flicker.
   let downSince = 0, lastData = 0;
-  const isLive = () => !!(phConn && phConn.open) && Date.now() - lastData < 30000;
+  const isLive = () => (!!(phConn && phConn.open) && Date.now() - lastData < 30000) || (relayOpen && phGotData > 0);
   setInterval(() => {
     if(isLive()){ downSince = 0; phSetStatus("Live", true); return; }
     if(!downSince) downSince = Date.now();
-    if(Date.now() - downSince > 5000) phSetStatus(phOffline ? "Big screen is offline — retrying…" : "Reconnecting…", false);
+    if(Date.now() - downSince > 5000) phSetStatus(phOffline ? "Big screen is offline — retrying…" : phGotData ? "Reconnecting…" : "Connecting…", false);
     // connection open but silent for 30s (the screen sends an update every 10s): it's dead, replace it
     if(phConn && phConn.open && Date.now() - lastData > 30000){ try{ phConn.close(); }catch(e){} phConn = null; connect(); }
   }, 1000);
@@ -1530,6 +1591,7 @@ async function startPhone(){
   const retry = ms => { clearTimeout(phRetry); phRetry = setTimeout(connect, ms); };
   const connect = () => {
     clearTimeout(phRetry);
+    if(!peerOk) return;                            // direct connections unavailable; the relay carries updates
     if(phConn && phConn.open) return;              // never replace a working connection
     if(!phPeer || phPeer.destroyed){
       phPeer = new Peer(peerOpts());
@@ -1546,7 +1608,7 @@ async function startPhone(){
     if(!phPeer.open) return;                        // waiting for the matchmaking server; "open" will call us
     const c = phConn = phPeer.connect(PEER_PREFIX + SYNC, {reliable:true});
     c.on("open", () => { if(c !== phConn) return; phOffline = false; lastData = Date.now(); });
-    c.on("data", d => { if(c !== phConn) return; lastData = Date.now(); phApply(d); });
+    c.on("data", d => { if(c !== phConn) return; lastData = Date.now(); phApply(d, "peer"); });
     const lost = () => { if(c !== phConn) return; phConn = null; retry(2000); };
     c.on("close", lost);
     c.on("error", lost);
