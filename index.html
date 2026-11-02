@@ -2048,7 +2048,8 @@ function syncState(){
     song: curTrack && curTrack.name ? {uri:curTrack.uri, name:curTrack.name, artist:curTrack.artist || "", art:curTrack.art || ""} : null,
     playing, jam:S.jamLink, t:Date.now(), endEpoch: running ? endAt : 0,
     endMsg: S.endMsgOn ? {seq:endMsgSeq, text:S.endMsg, secs:S.endMsgSecs} : null,
-    g: groupState()};
+    g: groupState(),
+    auto:S.auto, durs:{focus:S.focus*60000, short:S.short*60000, long:S.long*60000}};
 }
 function broadcast(){
   if(!syncReady || !conns.size) return;
@@ -2063,19 +2064,35 @@ function syncSoon(){ if(!SYNC && typeof broadcast === "function"){ clearTimeout(
 var relayLastKey = "", relayLastAt = 0, relayT = null, relayBackoff = 0;
 const RELAY = () => window.FJ_RELAY || "https://ntfy.sh";
 const relayTopic = code => "focusjams-" + code;
-function relayKey(st){
-  return JSON.stringify([st.mode, st.running, st.running ? Math.round(st.endEpoch/1000) : Math.round(st.remaining/1000),
-    st.cycle, st.every, st.done, st.colors, st.song && st.song.uri, st.song && st.song.name, st.song && st.song.art, st.playing, st.jam, st.g]);
+// What counts as a "change" worth a relay message. Focus minutes ticking up are NOT (they ride along on the next real change),
+// because the free relay only allows ~250 messages a day per network.
+function relayCritical(st){
+  return JSON.stringify([st.mode, st.running, st.running ? Math.round(st.endEpoch/1000) : Math.round(st.remaining/1000), st.cycle, st.every,
+    st.auto, st.durs, st.jam, st.endMsg && st.endMsg.seq, st.g && st.g.recap && st.g.recap.id, st.g && st.g.f]);
 }
+function relayKey(st){
+  const g = st.g ? [st.g.room, (st.g.ppl || []).map(p => [p.id, p.n, p.e, p.g, p.d, p.j]), st.g.night && [st.g.night.id, st.g.night.gd, st.g.night.p]] : null;
+  return relayCritical(st) + JSON.stringify([st.colors, st.song && st.song.uri, st.song && st.song.name, st.playing, g]);
+}
+function relayBudget(){
+  const d = new Date().toISOString().slice(0, 10);   // the relay's limit resets daily
+  let b = store.get("fj-relay-budget"); if(!b || b.d !== d) b = {d, n:0};
+  return b;
+}
+var relayLastCrit = "";
 function relayPublish(force){
   if(SYNC || !S.phoneSync || LOCAL_ONLY || !S.syncCode) return;
-  const st = syncState(), key = relayKey(st);
+  const st = syncState(), key = relayKey(st), crit = relayCritical(st), budget = relayBudget();
   if(!force && key === relayLastKey) return;
+  // running low on today's messages: only send timer changes (session switches, pauses), not crew/song details
+  if(!force && budget.n >= 170 && crit === relayLastCrit) return;
+  if(budget.n >= 245) return;
   const wait = Math.max(relayLastAt + 3000, relayBackoff) - Date.now();   // at most one post every 3s
   if(wait > 0){ clearTimeout(relayT); relayT = setTimeout(() => relayPublish(force), wait); return; }
-  relayLastKey = key; relayLastAt = Date.now();
+  relayLastKey = key; relayLastCrit = crit; relayLastAt = Date.now();
+  budget.n++; store.set("fj-relay-budget", budget);
   fetch(RELAY() + "/" + relayTopic(S.syncCode), {method:"POST", body:relayBody()})
-    .then(r => { if(r.status === 429){ relayLastKey = ""; relayBackoff = Date.now() + 60000; relayPublish(); } })
+    .then(r => { if(r.status === 429){ relayLastKey = ""; relayLastCrit = ""; relayBackoff = Date.now() + 120000; relayPublish(); } })
     .catch(() => { relayLastKey = ""; relayBackoff = Date.now() + 15000; relayPublish(); });
 }
 function renderSyncBox(){
@@ -2189,14 +2206,40 @@ function phApply(st, via){
   phGroupRender(st.g || null);
   phTick();
 }
+// What the phone should show right now. If the session ran out and no update has arrived yet,
+// work out what the projector is doing from the session lengths and auto-start setting.
+function phView(){
+  const st = phState, now = Date.now();
+  let v = {mode:st.mode, label:st.label, running:st.running, total:st.total, cycle:st.cycle,
+           rem: st.running ? Math.max(0, phEnd - now) : st.remaining, predicted:false};
+  if(!st.running || now <= phEnd + 1000) return v;
+  if(!st.durs){ v.label = "Syncing…"; return v; }   // older projector page: can't predict
+  let mode = st.mode, cycle = st.cycle, end = phEnd;
+  for(let i = 0; i < 40; i++){
+    let next;
+    if(mode === "focus"){ cycle++; next = cycle >= st.every ? "long" : "short"; }
+    else { if(mode === "long") cycle = 0; next = "focus"; }
+    mode = next;
+    const len = st.durs[mode];
+    if(!st.auto) return {mode, label:LABELS[mode], running:false, total:len, cycle, rem:len, predicted:true};
+    if(now < end + len) return {mode, label:LABELS[mode], running:true, total:len, cycle, rem:end + len - now, predicted:true};
+    end += len;
+  }
+  return v;
+}
+var phShownMode = null;
 function phTick(){
   if(!phState) return;
-  const rem = phState.running ? Math.max(0, phEnd - Date.now()) : phState.remaining;
-  // ran out but no new session yet: say so instead of sitting on 00:00
-  if(phState.running && Date.now() - phEnd > 1500) $("phLabel").textContent = "Syncing…";
-  $("phTime").textContent = fmt(rem/1000);
-  $("phProg").style.strokeDashoffset = C * (1 - rem/phState.total);
-  document.title = fmt(rem/1000) + " · " + phState.label;
+  const v = phView();
+  if(v.predicted){
+    $("phLabel").textContent = v.label + (v.running ? "" : " · paused");
+    $("phDots").innerHTML = Array.from({length:phState.every}, (_,i) => `<i class="${i < v.cycle ? "f" : ""}"></i>`).join("");
+    if(phShownMode && v.mode !== phShownMode && navigator.vibrate) navigator.vibrate([250, 120, 250]);
+  } else if(v.label === "Syncing…") $("phLabel").textContent = "Syncing…";
+  phShownMode = v.mode;
+  $("phTime").textContent = fmt(v.rem/1000);
+  $("phProg").style.strokeDashoffset = C * (1 - v.rem/v.total);
+  document.title = fmt(v.rem/1000) + " · " + v.label;
 }
 var relayES = null;
 function startRelay(){
@@ -2287,7 +2330,7 @@ async function startPhone(){
   // Stuck? The countdown ran out a few seconds ago but no new session arrived, or the direct connection went quiet.
   setInterval(() => {
     if(document.hidden) return;
-    const overdue = phState && phState.running && Date.now() - phEnd > 4000;
+    const overdue = phState && phState.running && Date.now() - phEnd > 4000;   // (the screen shows a prediction meanwhile)
     const quiet = phConn && phConn.open && Date.now() - lastData > 25000;
     const lostSignal = phPeer && phPeer.disconnected && !phPeer.destroyed;
     if(overdue || quiet || lostSignal) phResync();
@@ -2830,10 +2873,11 @@ function groupConnClosed(c){
   const p = id && people[id];
   if(p && !Array.from(connPerson.values()).includes(id)){ p.online = false; p.lastSeen = Date.now(); renderCrew(); }
 }
-function isOnline(p){ return p.via === "relay" ? Date.now() - p.lastSeen < 70000 : p.online; }
+function isOnline(p){ return p.via === "relay" ? Date.now() - p.lastSeen < 300000 : p.online; }
 
 // once a second: focus minutes, phone jail
-setInterval(() => {
+setInterval(groupSecond, 1000);
+function groupSecond(){
   if(SYNC || !night) { gTickAt = Date.now(); return; }
   const now = Date.now(), dt = Math.min(5000, now - gTickAt); gTickAt = now;
   const focusing = running && mode === "focus";
@@ -2852,7 +2896,22 @@ setInterval(() => {
   if(focusing || changed){ night.last = now; saveNight(); }
   renderCrew();
   if(changed) syncSoon();
-}, 1000);
+}
+// Browsers slow down timers in background tabs (to once a minute), which would make the projector late to switch
+// sessions if its tab is minimized. Timers inside a Worker aren't slowed, so a tiny Worker drives the clock.
+(function backgroundClock(){
+  if(SYNC) return;
+  try{
+    const w = new Worker(URL.createObjectURL(new Blob(["setInterval(() => postMessage(0), 1000)"], {type:"text/javascript"})));
+    let n = 0;
+    w.onmessage = () => {
+      if(!document.hidden) return;   // visible: the normal timers are fine
+      if(running) tick();
+      groupSecond();
+      if(++n % 10 === 0) broadcast();
+    };
+  }catch(e){}
+})();
 function groupSessionDone(){
   if(!night) return;
   night.sessions++;
@@ -3297,7 +3356,7 @@ if(SYNC){
   });
   addEventListener("pagehide", () => { if(me.name) phSend({t:"bye"}, false); });
   // keep relay-only phones counted as "here"
-  setInterval(() => { if(me.name && phG && !(phConn && phConn.open)) phSend({t:"ping"}); }, 25000);
+  setInterval(() => { if(me.name && phG && !(phConn && phConn.open)) phSend({t:"ping"}); }, 120000);
 }
 
 /* ----- face-down mode (phones) ----- */
