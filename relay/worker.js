@@ -18,13 +18,25 @@
 import { DurableObject } from "cloudflare:workers";
 
 const MAX_MSG = 1_000_000;   // Cloudflare's WebSocket message limit is 1 MiB
-const CORS = { "access-control-allow-origin": "*" };
+const CORS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
+  "access-control-allow-headers": "content-type",
+  "access-control-max-age": "86400",
+};
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname === "/" || url.pathname === "/health") {
       return new Response("Focus Jams sync server is running.", { headers: { "content-type": "text/plain", ...CORS } });
+    }
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+    // shared archive: /archive/<secret key>/...
+    const ar = url.pathname.match(/^\/archive\/([a-z0-9]{16,40})(\/.*)?$/i);
+    if (ar) {
+      const box = env.ARCHIVES.get(env.ARCHIVES.idFromName(ar[1].toLowerCase()));
+      return box.fetch(req);
     }
     const m = url.pathname.match(/^\/room\/([a-z0-9]{6,16})$/i);
     if (!m) return new Response("Not found", { status: 404, headers: CORS });
@@ -108,5 +120,116 @@ export class Room extends DurableObject {
     if (a.role === "phone") { if (!this.ctx.getWebSockets("p:" + a.id).some(x => x !== ws)) this.toHost({ k: "leave", id: a.id }); }
     else if (this.ctx.getWebSockets("host").filter(x => x !== ws).length === 0) this.toPhones(JSON.stringify({ t: "_host", on: false }));
     try { ws.close(1000, "bye"); } catch (e) {}
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Shared archive: every projector that knows the same secret key shares one archive of finished
+// nights (room + people stats) and all the photos. Plain HTTP + JSON, stored in SQLite.
+//
+//   GET    /archive/<key>/nights?since=<ms>  → {ids:{id:end}, nights:[changed since], photos:[ids], deleted:[ids], now, stats}
+//   PUT    /archive/<key>/night              ← a night summary (JSON)
+//   GET    /archive/<key>/photos?night=<id>  → [{id, night, ts, name, emoji, from, thumb}]
+//   PUT    /archive/<key>/photo              ← {id, night, ts, name, emoji, from, thumb, data:"data:image/jpeg;base64,…"}
+//   GET    /archive/<key>/photo/<id>         → the JPEG
+//   DELETE /archive/<key>/night/<id>         → removes the night and its photos everywhere
+// ---------------------------------------------------------------------------------------------
+const CHUNK = 900_000;               // SQLite values are capped at 2 MB, so photos are stored in pieces
+const MAX_PHOTO = 6_000_000;         // bytes per photo
+const MAX_TOTAL = 4_000_000_000;     // per archive (the free plan has 5 GB in total)
+const MAX_PHOTOS = 20_000;
+const json = (o, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json", ...CORS } });
+const cleanId = v => String(v || "").replace(/[^\w-]/g, "").slice(0, 60);
+
+export class Archive extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.sql = ctx.storage.sql;
+    this.sql.exec(`CREATE TABLE IF NOT EXISTS nights (id TEXT PRIMARY KEY, ended INTEGER, updated INTEGER, data TEXT);
+      CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, night TEXT, ts INTEGER, meta TEXT, thumb TEXT, size INTEGER, parts INTEGER, updated INTEGER);
+      CREATE INDEX IF NOT EXISTS photos_night ON photos(night);
+      CREATE TABLE IF NOT EXISTS parts (photo TEXT, i INTEGER, data BLOB, PRIMARY KEY (photo, i));
+      CREATE TABLE IF NOT EXISTS deleted (id TEXT PRIMARY KEY, at INTEGER);`);
+  }
+  isDeleted(id) { return this.sql.exec("SELECT 1 FROM deleted WHERE id = ?", id).toArray().length > 0; }
+  stats() {
+    const r = this.sql.exec("SELECT COUNT(*) AS n, COALESCE(SUM(size), 0) AS b FROM photos").one();
+    const nn = this.sql.exec("SELECT COUNT(*) AS n FROM nights").one();
+    return { nights: nn.n, photos: r.n, bytes: r.b };
+  }
+
+  async fetch(req) {
+    const url = new URL(req.url);
+    const path = url.pathname.replace(/^\/archive\/[^/]+/, "") || "/";
+    const now = Date.now();
+    try {
+      if (req.method === "GET" && path === "/nights") {
+        const since = +url.searchParams.get("since") || 0;
+        const ids = {};
+        for (const r of this.sql.exec("SELECT id, ended FROM nights")) ids[r.id] = r.ended;
+        const nights = this.sql.exec("SELECT data FROM nights WHERE updated > ?", since).toArray().map(r => JSON.parse(r.data));
+        const photos = this.sql.exec("SELECT id FROM photos").toArray().map(r => r.id);
+        const deleted = this.sql.exec("SELECT id FROM deleted").toArray().map(r => r.id);
+        return json({ ids, nights, photos, deleted, now, stats: this.stats() });
+      }
+      if (req.method === "PUT" && path === "/night") {
+        const n = await req.json();
+        const id = cleanId(n && n.id);
+        if (!id || typeof n !== "object") return json({ error: "bad night" }, 400);
+        if (this.isDeleted(id)) return json({ ok: false, deleted: true });
+        const data = JSON.stringify(n);
+        if (data.length > 500_000) return json({ error: "too big" }, 413);
+        const ended = +n.end || +n.start || 0;
+        const old = this.sql.exec("SELECT ended FROM nights WHERE id = ?", id).toArray()[0];
+        if (!old || ended >= old.ended) this.sql.exec("INSERT OR REPLACE INTO nights (id, ended, updated, data) VALUES (?, ?, ?, ?)", id, ended, now, data);
+        return json({ ok: true });
+      }
+      if (req.method === "GET" && path === "/photos") {
+        const night = cleanId(url.searchParams.get("night"));
+        const rows = this.sql.exec("SELECT id, night, ts, meta, thumb FROM photos WHERE night = ? ORDER BY ts DESC", night).toArray();
+        return json(rows.map(r => Object.assign({ id: r.id, night: r.night, ts: r.ts, thumb: r.thumb }, JSON.parse(r.meta || "{}"))));
+      }
+      if (req.method === "PUT" && path === "/photo") {
+        const p = await req.json();
+        const id = cleanId(p && p.id), night = cleanId(p && p.night);
+        if (!id || !night || typeof p.data !== "string" || !p.data.startsWith("data:image/")) return json({ error: "bad photo" }, 400);
+        if (this.isDeleted(id) || this.isDeleted(night)) return json({ ok: false, deleted: true });
+        if (this.sql.exec("SELECT 1 FROM photos WHERE id = ?", id).toArray().length) return json({ ok: true, had: true });
+        const bytes = Uint8Array.from(atob(p.data.slice(p.data.indexOf(",") + 1)), c => c.charCodeAt(0));
+        if (bytes.length > MAX_PHOTO) return json({ error: "photo too big" }, 413);
+        const st = this.stats();
+        if (st.photos >= MAX_PHOTOS || st.bytes + bytes.length > MAX_TOTAL) return json({ error: "archive full" }, 507);
+        const parts = Math.ceil(bytes.length / CHUNK);
+        for (let i = 0; i < parts; i++) this.sql.exec("INSERT OR REPLACE INTO parts (photo, i, data) VALUES (?, ?, ?)", id, i, bytes.slice(i * CHUNK, (i + 1) * CHUNK).buffer);
+        const meta = JSON.stringify({ name: String(p.name || "").slice(0, 80), emoji: String(p.emoji || "").slice(0, 8), from: cleanId(p.from) });
+        const thumb = typeof p.thumb === "string" && p.thumb.startsWith("data:image/") && p.thumb.length < 400_000 ? p.thumb : "";
+        this.sql.exec("INSERT INTO photos (id, night, ts, meta, thumb, size, parts, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", id, night, +p.ts || now, meta, thumb, bytes.length, parts, now);
+        return json({ ok: true });
+      }
+      let m = path.match(/^\/photo\/([\w-]+)$/);
+      if (req.method === "GET" && m) {
+        const ph = this.sql.exec("SELECT parts FROM photos WHERE id = ?", m[1]).toArray()[0];
+        if (!ph) return json({ error: "not found" }, 404);
+        const chunks = this.sql.exec("SELECT data FROM parts WHERE photo = ? ORDER BY i", m[1]).toArray().map(r => new Uint8Array(r.data));
+        return new Response(new Blob(chunks, { type: "image/jpeg" }), { headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=31536000, immutable", ...CORS } });
+      }
+      m = path.match(/^\/night\/([\w-]+)$/);
+      if (req.method === "DELETE" && m) {
+        const id = m[1];
+        const ph = this.sql.exec("SELECT id FROM photos WHERE night = ?", id).toArray().map(r => r.id);
+        for (const pid of ph) {
+          this.sql.exec("DELETE FROM parts WHERE photo = ?", pid);
+          this.sql.exec("INSERT OR REPLACE INTO deleted (id, at) VALUES (?, ?)", pid, now);
+        }
+        this.sql.exec("DELETE FROM photos WHERE night = ?", id);
+        this.sql.exec("DELETE FROM nights WHERE id = ?", id);
+        this.sql.exec("INSERT OR REPLACE INTO deleted (id, at) VALUES (?, ?)", id, now);
+        return json({ ok: true });
+      }
+      if (req.method === "GET" && path === "/") return json({ ok: true, stats: this.stats() });
+      return json({ error: "not found" }, 404);
+    } catch (e) {
+      return json({ error: String(e && e.message || e) }, 500);
+    }
   }
 }

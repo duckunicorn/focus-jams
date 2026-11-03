@@ -844,6 +844,20 @@
       </div>
       <p class="hint" id="srvMsg" style="margin-top:0">Paste the address of your own Cloudflare sync server here. Phones and this screen then sync through it, with no usage limits to worry about. Leave it empty to use the free public services instead.</p>
 
+      <h3>📚 Shared archive</h3>
+      <p class="hint" style="margin-top:0">Keeps every finished night (room and people stats) and every photo on your sync server, so all your Focus Jams screens share one history and one photo archive. Set it up on one computer, then paste the same key on the others.</p>
+      <div id="arcOff">
+        <div class="testrow" style="margin-top:0"><button class="big sm" id="arcCreate">Create a shared archive</button></div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="arcKeyIn" placeholder="Or paste a key from another computer" autocomplete="off" spellcheck="false">
+          <button class="ghost" id="arcJoin">Join</button>
+        </div>
+      </div>
+      <div id="arcOn" hidden>
+        <div class="copyrow"><code id="arcKey"></code><button class="ghost sm" id="arcCopy">Copy key</button><button class="ghost sm" id="arcSyncBtn">Sync now</button><button class="ghost sm" id="arcLeave">Disconnect</button></div>
+      </div>
+      <p class="hint" id="arcMsg"></p>
+
       <h3>Group features</h3>
       <p class="hint" style="margin-top:0">These use phone sync: people scan the QR code, pick a name, and their phone talks to this screen.</p>
       <div class="toggles" style="margin-top:6px">
@@ -1007,7 +1021,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              vizStopAtEnd:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
              sndJailIn:"siren", sndJailOut:"unlock", sndGoal:"fanfare", sndPhoto:"shutter",
              fadeMusic:true, fadeSecs:4,
-             gGoals:true, gJail:true, gStats:true, gPhotos:true, jailGrace:20, roomName:"", deviceId:"", syncServer:"",
+             gGoals:true, gJail:true, gStats:true, gPhotos:true, jailGrace:20, roomName:"", deviceId:"", syncServer:"", archiveKey:"",
              breakUri:"spotify:playlist:37i9dQZF1DX3rxVfibe1L0", breakPlaylist:true, customNames:{},
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
@@ -3072,7 +3086,7 @@ function archive(n){
   const r = summarize(n);
   if(!r.people.length && r.focusMs < 60000 && !r.photos) return null;   // nothing happened: don't clutter history
   const h = getHist();
-  h.nights = h.nights.filter(x => x.id !== r.id); h.nights.unshift(r); h.nights = h.nights.slice(0, 300);
+  h.nights = h.nights.filter(x => x.id !== r.id); h.nights.unshift(r); h.nights = h.nights.slice(0, 2000);
   for(const p of r.people){
     const a = h.people[p.id] || {name:p.name, emoji:p.emoji, nights:0, focusMs:0, sessions:0, goalsDone:0, jailVisits:0};
     Object.assign(a, {name:p.name, emoji:p.emoji, last:r.end});
@@ -3090,6 +3104,7 @@ function endNight(){
   night = null; people = {}; store.set("fj-night", null);
   lastRecap = r;
   renderCrew(); renderGroupUI(); syncSoon(); relayPublish(true);
+  archSoon(1000);
   showRecap(r);
 }
 function loadNight(){
@@ -3354,6 +3369,7 @@ async function savePhoto(p, m){
   night.photos++; delete collageCache[night.id];
   night.last = Date.now(); saveNight(true); renderCrew(); syncSoon();
   gToast(`📸 ${p.emoji} ${escH(p.name)} added a photo`, m.data); groupSound("sndPhoto");
+  archSoon(8000);
   if(!$("album").hidden && albumMode === "projector") albumOpen("projector");
 }
 async function nightPhotos(nightId){
@@ -3361,6 +3377,7 @@ async function nightPhotos(nightId){
 }
 async function buildCollage(r){
   if(collageCache[r.id]) return collageCache[r.id];
+  await archPull(r.id);
   const photos = (await nightPhotos(r.id)).sort((a,b) => a.ts - b.ts);
   if(!photos.length) return null;
   const imgs = [];
@@ -3423,6 +3440,8 @@ function downloadBlob(blob, name){
 }
 const fileDate = r => { const d = new Date(r.start); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 async function downloadAlbum(r){
+  if(S.archiveKey) gToast("Getting the photos…");
+  await archPull(r.id);
   const photos = (await nightPhotos(r.id)).sort((a,b) => a.ts - b.ts);
   if(!photos.length){ gToast("No photos for that night."); return; }
   const files = [];
@@ -3478,12 +3497,14 @@ function renderGroupUI(){
   const h = getHist();
   $("histNights").innerHTML = h.nights.length ? h.nights.slice(0, 50).map(r => `<div class="hist-row"><div><b>${new Date(r.start).toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"})}</b> · ${escH(r.room)}<br>
       ${minsTxt(r.focusMs)} focused · ${r.sessions} sessions · ${r.people.length} people · ${r.goalsDone} goals${r.photos ? ` · 📸 ${r.photos}` : ""}</div>
-      <div class="testrow" style="margin:0"><button class="ghost sm" data-recap="${r.id}">View</button>${r.photos ? `<button class="ghost sm" data-album="${r.id}">⬇ Photos</button>` : ""}</div></div>`).join("")
+      <div class="testrow" style="margin:0"><button class="ghost sm" data-recap="${r.id}">View</button>${r.photos ? `<button class="ghost sm" data-browse="${r.id}">🖼 Photos</button><button class="ghost sm" data-album="${r.id}">⬇ .zip</button>` : ""}<button class="ghost sm" data-del="${r.id}" title="Delete this night">🗑</button></div></div>`).join("")
     : `<p class="hint" style="margin:0">Finished nights show up here.</p>`;
   const ppl = Object.entries(h.people).sort((a,b) => b[1].focusMs - a[1].focusMs);
   $("histPeople").innerHTML = ppl.length ? `<table class="ptable"><tr><th>Name</th><th>Nights</th><th>Focus</th><th>Sessions</th><th>Goals</th><th>📵</th></tr>` +
-    ppl.slice(0, 100).map(([id, a]) => `<tr><td>${a.emoji} ${escH(a.name)}</td><td>${a.nights}</td><td>${minsTxt(a.focusMs)}</td><td>${a.sessions}</td><td>${a.goalsDone}</td><td>${a.jailVisits}</td></tr>`).join("") + `</table>`
+    ppl.slice(0, 200).map(([id, a]) => `<tr><td>${a.emoji} ${escH(a.name)}</td><td>${a.nights}</td><td>${minsTxt(a.focusMs)}</td><td>${a.sessions}</td><td>${a.goalsDone}</td><td>${a.jailVisits}</td></tr>`).join("") + `</table>`
     : `<p class="hint" style="margin:0">People who join show up here after the night ends.</p>`;
+  $("histClear").hidden = !!S.archiveKey;
+  renderArcUI();
 }
 ["gGoals","gJail","gStats","gPhotos"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); renderCrew(); syncSoon(); });
 $("s-syncServer").onchange = e => {
@@ -3514,6 +3535,9 @@ $("histNights").onclick = e => {
   const find = id => getHist().nights.find(x => x.id === id);
   if(v && find(v.dataset.recap)){ $("look").close(); showRecap(find(v.dataset.recap)); }
   if(a && find(a.dataset.album)) downloadAlbum(find(a.dataset.album));
+  const br = e.target.closest("[data-browse]"), dl = e.target.closest("[data-del]");
+  if(br && find(br.dataset.browse)){ $("look").close(); albumOpen("projector", br.dataset.browse); }
+  if(dl && find(dl.dataset.del)) deleteNight(dl.dataset.del);
 };
 $("histClear").onclick = async () => {
   if(!(window.FJ_AUTO_CONFIRM || confirm("Delete all room and people history on this computer? (Photos from past nights are deleted too.)"))) return;
@@ -3521,6 +3545,149 @@ $("histClear").onclick = async () => {
   try{ const all = await idbDo("readonly", st => st.getAll(), "photos"); for(const ph of all || []) if(ph.night !== keep) await idbDo("readwrite", st => st.delete(ph.id), "photos"); }catch(e){}
   store.set("fj-hist", null); collageCache = {}; renderGroupUI();
 };
+/* ----- shared archive: all screens with the same key share history and photos (stored on your sync server) ----- */
+var arcBusy = false, arcT = null, arcStat = store.get("fj-arc-stat") || null;
+const arcBase = () => {
+  const h = normHost(S.syncServer);
+  return S.archiveKey && h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/archive/${S.archiveKey}` : null;
+};
+async function archJson(method, path, body){
+  const base = arcBase(); if(!base) throw new Error("no archive");
+  const r = await fetch(base + path, {method, cache:"no-store", headers:body ? {"content-type":"application/json"} : {}, body:body ? JSON.stringify(body) : undefined});
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if(!r.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
+  return j;
+}
+async function archPhotoBlob(id){
+  const r = await fetch(arcBase() + "/photo/" + encodeURIComponent(id));
+  return r.ok ? r.blob() : null;
+}
+function archSoon(ms){ if(!S.archiveKey || SYNC) return; clearTimeout(arcT); arcT = setTimeout(archSync, ms || 3000); }
+function arcSay(t){ if($("arcMsg")) $("arcMsg").textContent = t; }
+// all-time people stats come from the nights themselves, so the same person on two screens is counted once per night
+function rebuildPeople(h){
+  const ppl = {};
+  for(const r of h.nights.slice().sort((a,b) => a.start - b.start)) for(const p of r.people || []){
+    const a = ppl[p.id] || {name:p.name, emoji:p.emoji, nights:0, focusMs:0, sessions:0, goalsDone:0, jailVisits:0};
+    Object.assign(a, {name:p.name, emoji:p.emoji, last:r.end});
+    a.nights++; a.focusMs += p.focusMs || 0; a.sessions += p.sessions || 0; a.goalsDone += p.goalsDone || 0; a.jailVisits += p.jailVisits || 0;
+    ppl[p.id] = a;
+  }
+  h.people = ppl;
+}
+async function archSync(){
+  if(!arcBase() || SYNC) return;
+  if(arcBusy){ archSoon(5000); return; }
+  arcBusy = true;
+  try{
+    arcSay("Syncing with the shared archive…");
+    const srv = await archJson("GET", "/nights?since=0");
+    const gone = new Set(srv.deleted || []);
+    // 1. nights: take the archive's, then send ours that it doesn't have (or has an older copy of)
+    const h = getHist();
+    h.nights = h.nights.filter(r => !gone.has(r.id));
+    for(const r of srv.nights || []){
+      if(night && r.id === night.id) continue;
+      const i = h.nights.findIndex(x => x.id === r.id);
+      if(i < 0) h.nights.push(r); else if((r.end || 0) > (h.nights[i].end || 0)) h.nights[i] = r;
+    }
+    h.nights.sort((a,b) => b.start - a.start); h.nights = h.nights.slice(0, 2000);
+    rebuildPeople(h); store.set("fj-hist", h);
+    let sentN = 0;
+    for(const r of h.nights) if(!(r.id in srv.ids) || (r.end || 0) > (srv.ids[r.id] || 0)){ await archJson("PUT", "/night", r); sentN++; }
+    // 2. photos: drop deleted ones here, send ours the archive doesn't have yet
+    const have = new Set(srv.photos || []);
+    let all = [];
+    try{ all = (await idbDo("readonly", st => st.getAll(), "photos")) || []; }catch(e){}
+    for(const ph of all) if(gone.has(ph.id) || gone.has(ph.night)) await idbDo("readwrite", st => st.delete(ph.id), "photos").catch(() => {});
+    const todo = all.filter(ph => !have.has(ph.id) && !gone.has(ph.id) && !gone.has(ph.night) && ph.blob);
+    let sentP = 0, failP = 0;
+    for(const ph of todo){
+      arcSay(`Uploading photos to the shared archive… ${sentP + 1} of ${todo.length}`);
+      try{
+        await archJson("PUT", "/photo", {id:ph.id, night:ph.night, ts:ph.ts, name:ph.name, emoji:ph.emoji, from:ph.from,
+          thumb:ph.thumb || await makeThumb(ph.blob), data:await blobToData(ph.blob)});
+        sentP++;
+      }catch(e){ failP++; if(/full/.test(e.message)){ arcSay("⚠️ The shared archive is full."); break; } }
+    }
+    const st = srv.stats || {};
+    arcStat = {at:Date.now(), nights:Math.max(st.nights || 0, h.nights.length), photos:(st.photos || 0) + sentP, mb:Math.round(((st.bytes || 0) / 1e6))};
+    store.set("fj-arc-stat", arcStat);
+    collageCache = {};
+    arcBusy = false; renderGroupUI();
+    if(failP) arcSay(`Synced, but ${failP} photo${failP === 1 ? "" : "s"} couldn't be uploaded. Trying again later.`);
+  }catch(e){
+    arcSay("❌ Couldn't reach the shared archive (" + (e.message || e) + "). Check Your sync server above. Trying again later.");
+  }
+  arcBusy = false;
+}
+// photos from other screens: download them into this computer when a night's collage or .zip is made
+async function archPull(nightId){
+  if(!arcBase() || !nightId) return;
+  try{
+    const remote = await archJson("GET", "/photos?night=" + encodeURIComponent(nightId));
+    const local = new Set((await nightPhotos(nightId)).map(p => p.id));
+    for(const ph of remote || []){
+      if(local.has(ph.id)) continue;
+      const blob = await archPhotoBlob(ph.id); if(!blob) continue;
+      await idbDo("readwrite", st => st.put({id:ph.id, night:nightId, from:ph.from || "", name:ph.name || "", emoji:ph.emoji || "", ts:ph.ts, blob, thumb:ph.thumb || ""}), "photos");
+    }
+  }catch(e){}
+}
+async function deleteNight(id){
+  const r = getHist().nights.find(x => x.id === id); if(!r) return;
+  const msg = S.archiveKey
+    ? "Delete this night and its photos from the shared archive? It disappears from every screen that uses it."
+    : "Delete this night and its photos from this computer's history?";
+  if(!(window.FJ_AUTO_CONFIRM || confirm(msg))) return;
+  if(S.archiveKey){
+    try{ await archJson("DELETE", "/night/" + encodeURIComponent(id)); }
+    catch(e){ arcSay("❌ Couldn't delete it from the shared archive (" + e.message + "). Nothing was deleted."); return; }
+  }
+  const h = getHist(); h.nights = h.nights.filter(x => x.id !== id); rebuildPeople(h); store.set("fj-hist", h);
+  for(const ph of await nightPhotos(id)) await idbDo("readwrite", st => st.delete(ph.id), "photos").catch(() => {});
+  delete collageCache[id]; renderGroupUI();
+}
+function renderArcUI(){
+  const on = !!S.archiveKey;
+  $("arcOff").hidden = on; $("arcOn").hidden = !on;
+  $("arcKey").textContent = S.archiveKey.replace(/(.{4})(?=.)/g, "$1-");
+  if(arcBusy) return;
+  if(!normHost(S.syncServer)) arcSay(on ? "⚠️ Needs your sync server (above) to work." : "Set up Your sync server above first: the archive is stored there.");
+  else if(on && arcStat) arcSay(`✅ Shared · ${arcStat.nights} nights · ${arcStat.photos} photos (${arcStat.mb} MB) · synced ${new Date(arcStat.at).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"})}`);
+  else if(on) arcSay("Connected. Syncing soon…");
+  else arcSay("");
+}
+const arcKeyNorm = v => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+async function arcConnect(key, isNew){
+  if(!normHost(S.syncServer)){ arcSay("Set up Your sync server above first: the archive is stored there."); return; }
+  const old = S.archiveKey;
+  S.archiveKey = key;
+  try{ await archJson("GET", "/"); }
+  catch(e){ S.archiveKey = old; arcSay("❌ Couldn't reach the archive on your sync server (" + e.message + "). If you set the server up before this feature existed, Cloudflare updates it automatically within a few minutes of the update."); return; }
+  save(); arcStat = null; store.set("fj-arc-stat", null);
+  renderGroupUI(); arcSay(isNew ? "Created! Copy the key and paste it on your other Focus Jams screens. Uploading this computer's history…" : "Joined! Merging this computer's history with the archive…");
+  archSync();
+}
+$("arcCreate").onclick = () => { const k = Array.from(crypto.getRandomValues(new Uint8Array(20)), b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join(""); arcConnect(k, true); };
+$("arcJoin").onclick = () => {
+  const k = arcKeyNorm($("arcKeyIn").value);
+  if(k.length < 16){ arcSay("That key looks too short. Copy it again from the other screen (Customize → 👥 Group → Shared archive)."); return; }
+  arcConnect(k, false); $("arcKeyIn").value = "";
+};
+$("arcKeyIn").onkeydown = e => { if(e.key === "Enter") $("arcJoin").click(); };
+$("arcCopy").onclick = () => { navigator.clipboard.writeText(S.archiveKey).then(() => arcSay("Key copied. Paste it on the other screen under Customize → 👥 Group → Shared archive."), () => arcSay("Select the key and copy it.")); };
+$("arcSyncBtn").onclick = () => archSync();
+$("arcLeave").onclick = () => {
+  if(!(window.FJ_AUTO_CONFIRM || confirm("Stop sharing on this computer? Nothing is deleted: this computer keeps what it has, and the archive keeps everything. You can join again with the key."))) return;
+  S.archiveKey = ""; save(); arcStat = null; store.set("fj-arc-stat", null); renderGroupUI();
+};
+if(!SYNC){
+  setTimeout(() => archSoon(1), 4000);
+  setInterval(() => archSoon(1), 10*60*1000);
+  document.addEventListener("visibilitychange", () => { if(!document.hidden && arcStat && Date.now() - arcStat.at > 5*60*1000) archSoon(1); });
+}
+
 if(!S.deviceId && !SYNC){ S.deviceId = newCode(); save(); }
 loadNight(); renderCrew();
 
@@ -3782,16 +3949,26 @@ function albumRender(){
   $("albumCount").textContent = albumItems.length ? `${albumItems.length} photo${albumItems.length === 1 ? "" : "s"}` : "";
   $("albumGrid").innerHTML = albumItems.map(ph => `<button data-ph="${escH(ph.id)}"><img src="${ph.thumb}" alt="" loading="lazy"><span>${escH(ph.emoji || "")} ${escH(ph.name || "")}</span></button>`).join("");
 }
-async function albumOpen(mode){
+async function albumOpen(mode, nightId){
   albumMode = mode;
   $("album").hidden = false; $("albumView").hidden = true;
   $("albumZip").hidden = mode !== "projector";
   if(mode === "projector"){
     const r = night ? summarize(night) : lastRecap;
-    albumNight = r ? r.id : null;
+    albumNight = nightId || (r ? r.id : null);
     albumItems = albumNight ? (await albumPhotos(albumNight)).map(ph => ({id:ph.id, name:ph.name, emoji:ph.emoji, ts:ph.ts, thumb:ph.thumb})) : [];
-    $("albumMsg").textContent = albumItems.length ? "" : "No photos yet. Phones can add them, or press 📸 Group photo.";
+    $("albumMsg").textContent = albumItems.length ? "" : S.archiveKey ? "Loading photos…" : "No photos yet. Phones can add them, or press 📸 Group photo.";
     albumRender();
+    if(albumNight && S.archiveKey){
+      const want = albumNight;
+      try{
+        const remote = await archJson("GET", "/photos?night=" + encodeURIComponent(want));
+        if(albumNight !== want || $("album").hidden) return;
+        for(const ph of remote || []) if(!albumItems.some(x => x.id === ph.id)) albumItems.push({id:ph.id, name:ph.name, emoji:ph.emoji, ts:ph.ts, thumb:ph.thumb, remote:true});
+        albumItems.sort((a,b) => b.ts - a.ts); albumRender();
+        $("albumMsg").textContent = albumItems.length ? "" : "No photos for this night.";
+      }catch(e){ if(!albumItems.length) $("albumMsg").textContent = "Couldn't reach the shared archive."; }
+    }
   } else {
     const g = phG || {};
     const nid = (g.night && g.night.id) || (g.recap && g.recap.id);
@@ -3817,6 +3994,7 @@ async function albumShow(id){
   if(albumMode === "projector"){
     const rec = await idbDo("readonly", st => st.get(id), "photos").catch(() => null);
     if(rec) setFull(URL.createObjectURL(rec.blob));
+    else if(S.archiveKey){ try{ const b = await archPhotoBlob(id); if(b) setFull(URL.createObjectURL(b)); }catch(e){ $("albumSave").textContent = "Couldn't load it"; } }
   } else if(phAlbumFull[id]) setFull(phAlbumFull[id]);
   else { phAlbumFull.want = id; phSend({t:"getPhoto", id}, false); }
 }
@@ -3839,7 +4017,10 @@ function phAlbumMsg(d){
 $("albumClose").onclick = albumClose;
 $("albumBack").onclick = () => { $("albumView").hidden = true; };
 $("albumGrid").onclick = e => { const b = e.target.closest("[data-ph]"); if(b) albumShow(b.dataset.ph); };
-$("albumZip").onclick = () => { const r = night ? summarize(night) : lastRecap; if(r) downloadAlbum(r); };
+$("albumZip").onclick = () => {
+  const r = albumNight && getHist().nights.find(x => x.id === albumNight) || (night ? summarize(night) : lastRecap);
+  if(r) downloadAlbum(r);
+};
 $("albumBtn").onclick = () => albumOpen("projector");
 document.addEventListener("keydown", e => {
   if($("album").hidden) return;

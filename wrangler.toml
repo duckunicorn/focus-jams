@@ -8,10 +8,19 @@ compatibility_date = "2025-06-01"
 name = "ROOMS"
 class_name = "Room"
 
+[[durable_objects.bindings]]
+name = "ARCHIVES"
+class_name = "Archive"
+
 # SQLite-backed Durable Objects are the kind included in the free plan
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+# v2: the shared archive of nights and photos
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Archive"]
 
 [observability]
 enabled = true

@@ -19,6 +19,13 @@ worry about. It runs on Cloudflare Workers' free plan (one "room" per projector,
 
 Cloudflare redeploys the server automatically whenever this folder changes on GitHub.
 
+## Shared archive
+
+The same server also stores the **shared archive**: every finished night (room and people stats) and every
+photo, shared by all your Focus Jams screens. On one screen, open **Customize → 👥 Group → Shared archive →
+Create a shared archive**, copy the key, and paste it on your other screens. Anyone with the key can see the
+archive, so keep it to your group. Photos use the free plan's 5 GB of storage (roughly 10,000+ photos).
+
 ## Free plan
 
 Each night uses a few thousand of the free plan's ~100,000 daily requests (keep-alive pings are answered
@@ -26,5 +33,5 @@ without counting, and the room sleeps between messages), so a study group won't 
 
 ## Files
 
-- `worker.js`: the server
+- `worker.js`: the server (live rooms for phone sync, and the shared archive)
 - `../wrangler.toml` (top of the repository): Cloudflare settings (name, the Durable Object "room", free-plan storage type)
