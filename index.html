@@ -719,6 +719,7 @@
     <div class="dlg-h"><h2>📚 Archive</h2><button class="big sm" id="arcClose">Done</button></div>
       <h3 style="margin-top:6px">Nights</h3>
       <div id="histNights"></div>
+      <input type="file" id="histZipIn" accept=".zip,application/zip,application/x-zip-compressed,image/*" multiple hidden>
       <h3>People (all time)</h3>
       <div id="histPeople"></div>
       <div class="testrow"><button class="ghost sm" id="histClear">Clear history</button></div>
@@ -3519,7 +3520,7 @@ function renderGroupUI(){
   const h = getHist();
   $("histNights").innerHTML = h.nights.length ? h.nights.slice(0, 50).map(r => `<div class="hist-row"><div><b>${new Date(r.start).toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"})}</b> · ${escH(r.room)}<br>
       ${minsTxt(r.focusMs)} focused · ${r.sessions} sessions · ${r.people.length} people · ${r.goalsDone} goals${r.photos ? ` · 📸 ${r.photos}` : ""}</div>
-      <div class="testrow" style="margin:0"><button class="ghost sm" data-recap="${r.id}">View</button>${r.photos ? `<button class="ghost sm" data-browse="${r.id}">🖼 Photos</button><button class="ghost sm" data-album="${r.id}">⬇ .zip</button>` : ""}<button class="ghost sm" data-del="${r.id}" title="Delete this night">🗑</button></div></div>`).join("")
+      <div class="testrow" style="margin:0"><button class="ghost sm" data-recap="${r.id}">View</button>${r.photos ? `<button class="ghost sm" data-browse="${r.id}">🖼 Photos</button><button class="ghost sm" data-album="${r.id}">⬇ .zip</button><button class="ghost sm" data-addzip="${r.id}" hidden title="This night's ${r.photos} photos aren't saved anywhere: add them back from a .zip">⬆ Add photos (.zip)</button>` : ""}<button class="ghost sm" data-del="${r.id}" title="Delete this night">🗑</button></div></div>`).join("")
     : `<p class="hint" style="margin:0">Finished nights show up here.</p>`;
   const ppl = Object.entries(h.people).sort((a,b) => b[1].focusMs - a[1].focusMs);
   $("histPeople").innerHTML = ppl.length ? `<table class="ptable"><tr><th>Name</th><th>Nights</th><th>Focus</th><th>Sessions</th><th>Goals</th><th>📵</th></tr>` +
@@ -3527,6 +3528,22 @@ function renderGroupUI(){
     : `<p class="hint" style="margin:0">People who join show up here after the night ends.</p>`;
   $("histClear").hidden = !!S.archiveKey;
   renderArcUI();
+  markMissingPhotos();
+}
+// a night remembers how many photos it had; if none of them are on this computer or in the shared archive, offer to add them back
+async function nightPhotoCount(id){
+  try{ return (await idbDo("readonly", st => st.index("night").count(id), "photos")) || 0; }catch(e){ return 0; }
+}
+async function nightMissing(id){
+  if(S.archiveKey && !arcCounts) return false;   // don't know yet what the archive has
+  return !(await nightPhotoCount(id)) && !((arcCounts && arcCounts[id]) || 0);
+}
+async function markMissingPhotos(){
+  for(const b of document.querySelectorAll("#histNights [data-addzip]")){
+    const miss = await nightMissing(b.dataset.addzip);
+    b.hidden = !miss;
+    b.closest(".testrow").querySelectorAll("[data-browse],[data-album]").forEach(x => x.hidden = miss);
+  }
 }
 ["gGoals","gJail","gStats","gPhotos"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); renderCrew(); syncSoon(); });
 $("s-syncServer").onchange = e => {
@@ -3560,6 +3577,77 @@ $("histNights").onclick = e => {
   const br = e.target.closest("[data-browse]"), dl = e.target.closest("[data-del]");
   if(br && find(br.dataset.browse)){ $("arcDlg").close(); albumOpen("projector", br.dataset.browse); }
   if(dl && find(dl.dataset.del)) deleteNight(dl.dataset.del);
+  const az = e.target.closest("[data-addzip]");
+  if(az && find(az.dataset.addzip)){ addZipNight = az.dataset.addzip; $("histZipIn").value = ""; $("histZipIn").click(); }
+};
+/* ----- add photos to a past night from a .zip (or picked image files) ----- */
+var addZipNight = null;
+// minimal .zip reader: stored and deflated files (what Mac, Windows and phones make)
+async function unzipImages(file){
+  const buf = new Uint8Array(await file.arrayBuffer()), dv = new DataView(buf.buffer);
+  let e = -1;
+  for(let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) if(dv.getUint32(i, true) === 0x06054b50){ e = i; break; }
+  if(e < 0) throw new Error("That file isn't a .zip");
+  const n = dv.getUint16(e + 10, true); let off = dv.getUint32(e + 16, true);
+  const out = [], dec = new TextDecoder();
+  for(let k = 0; k < n; k++){
+    if(dv.getUint32(off, true) !== 0x02014b50) break;
+    const method = dv.getUint16(off + 10, true), csize = dv.getUint32(off + 20, true);
+    const nlen = dv.getUint16(off + 28, true), xlen = dv.getUint16(off + 30, true), clen = dv.getUint16(off + 32, true), lho = dv.getUint32(off + 42, true);
+    const name = dec.decode(buf.subarray(off + 46, off + 46 + nlen));
+    off += 46 + nlen + xlen + clen;
+    if(/(^|\/)(__MACOSX|\.)/.test(name) || !/\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i.test(name)) continue;
+    const start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true);
+    let data = buf.subarray(start, start + csize);
+    if(method === 8){
+      if(typeof DecompressionStream !== "function") throw new Error("This browser can't open .zip files. Pick the photos themselves instead");
+      data = new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+    } else if(method !== 0) continue;
+    out.push({name:name.split("/").pop(), blob:new Blob([data])});
+  }
+  return out;
+}
+// shrink like phone photos (max 1600 px JPEG) so the archive stays small
+async function toAlbumJpeg(blob){
+  const im = await createImageBitmap(blob);
+  const sc = Math.min(1, 1600 / Math.max(im.width, im.height)), cv = document.createElement("canvas");
+  cv.width = Math.round(im.width*sc); cv.height = Math.round(im.height*sc);
+  cv.getContext("2d").drawImage(im, 0, 0, cv.width, cv.height);
+  return new Promise(res => cv.toBlob(res, "image/jpeg", .85));
+}
+$("histZipIn").onchange = async e => {
+  const files = [...e.target.files], nid = addZipNight; addZipNight = null;
+  const r0 = getHist().nights.find(x => x.id === nid);
+  if(!files.length || !r0) return;
+  if(!(await nightMissing(nid))){ gToast("This night already has its photos."); return; }
+  let items = [];
+  try{
+    for(const f of files){
+      if(/\.zip$/i.test(f.name) || /zip/.test(f.type)) items = items.concat(await unzipImages(f));
+      else if(/^image\//.test(f.type) || /\.(jpe?g|png|webp|gif|bmp|heic|heif|avif)$/i.test(f.name)) items.push({name:f.name, blob:f});
+    }
+  }catch(err){ gToast("⚠️ " + (err.message || err)); return; }
+  items = items.filter(x => !/group collage/i.test(x.name));   // the collage in a Focus Jams .zip isn't one of the photos
+  const want = r0.photos;
+  if(items.length !== want){
+    gToast(`⚠️ That .zip has ${items.length} photo${items.length === 1 ? "" : "s"}, but this night had ${want}. Use one with exactly ${want} (a group collage in it doesn't count).`);
+    return;
+  }
+  items.sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+  // convert all of them first: if any can't be opened, add none, so the night's count stays right
+  const recs = [];
+  for(let i = 0; i < items.length; i++){
+    gToast(`Adding photos… ${i + 1} of ${items.length}`);
+    let blob = null;
+    try{ blob = await toAlbumJpeg(items[i].blob); }catch(err){}
+    if(!blob){ gToast(`⚠️ Couldn't open “${items[i].name}”${/\.hei[cf]$/i.test(items[i].name) ? " (iPhone HEIC photos need to be exported as JPEG first)" : ""}. Nothing was added.`); return; }
+    // "003 - Sam.jpg" (how Focus Jams names them) → "Sam"
+    const name = items[i].name.replace(/\.[^.]+$/, "").replace(/^\d+\s*-\s*/, "").trim().slice(0, 40) || "Photo";
+    recs.push({id:nid + "-z" + (i + 1), night:nid, from:"upload", name, emoji:"🖼", ts:(r0.start || Date.now()) + i*1000, blob, thumb:await makeThumb(blob)});
+  }
+  for(const rec of recs) await idbDo("readwrite", st => st.put(rec), "photos");
+  delete collageCache[nid]; renderGroupUI(); archSoon(500);
+  gToast(`📸 Added all ${recs.length} photos back to that night${S.archiveKey ? " and uploading them to the shared archive" : ""}.`);
 };
 $("histClear").onclick = async () => {
   if(!(window.FJ_AUTO_CONFIRM || confirm("Delete all room and people history on this computer? (Photos from past nights are deleted too.)"))) return;
@@ -3568,7 +3656,7 @@ $("histClear").onclick = async () => {
   store.set("fj-hist", null); collageCache = {}; renderGroupUI();
 };
 /* ----- shared archive: all screens with the same key share history and photos (stored on your sync server) ----- */
-var arcBusy = false, arcT = null, arcStat = store.get("fj-arc-stat") || null;
+var arcBusy = false, arcT = null, arcStat = store.get("fj-arc-stat") || null, arcCounts = null;
 const arcBase = () => {
   const h = normHost(S.syncServer);
   return S.archiveKey && h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/archive/${S.archiveKey}` : null;
@@ -3587,6 +3675,7 @@ async function archPhotoBlob(id){
 function archSoon(ms){ if(!S.archiveKey || SYNC) return; clearTimeout(arcT); arcT = setTimeout(archSync, ms || 3000); }
 function arcSay(t){ if($("arcMsg")) $("arcMsg").textContent = t; }
 // all-time people stats come from the nights themselves, so the same person on two screens is counted once per night
+const nightVer = r => Math.max(r.edited || 0, r.end || 0);
 function rebuildPeople(h){
   const ppl = {};
   for(const r of h.nights.slice().sort((a,b) => a.start - b.start)) for(const p of r.people || []){
@@ -3611,12 +3700,12 @@ async function archSync(){
     for(const r of srv.nights || []){
       if(night && r.id === night.id) continue;
       const i = h.nights.findIndex(x => x.id === r.id);
-      if(i < 0) h.nights.push(r); else if((r.end || 0) > (h.nights[i].end || 0)) h.nights[i] = r;
+      if(i < 0) h.nights.push(r); else if(nightVer(r) > nightVer(h.nights[i])) h.nights[i] = r;
     }
     h.nights.sort((a,b) => b.start - a.start); h.nights = h.nights.slice(0, 2000);
     rebuildPeople(h); store.set("fj-hist", h);
     let sentN = 0;
-    for(const r of h.nights) if(!(r.id in srv.ids) || (r.end || 0) > (srv.ids[r.id] || 0)){ await archJson("PUT", "/night", r); sentN++; }
+    for(const r of h.nights) if(!(r.id in srv.ids) || nightVer(r) > (srv.ids[r.id] || 0)){ await archJson("PUT", "/night", r); sentN++; }
     // 2. photos: drop deleted ones here, send ours the archive doesn't have yet
     const have = new Set(srv.photos || []);
     let all = [];
@@ -3632,6 +3721,7 @@ async function archSync(){
         sentP++;
       }catch(e){ failP++; if(/full/.test(e.message)){ arcSay("⚠️ The shared archive is full."); break; } }
     }
+    arcCounts = srv.counts || {};
     const st = srv.stats || {};
     arcStat = {at:Date.now(), nights:Math.max(st.nights || 0, h.nights.length), photos:(st.photos || 0) + sentP, mb:Math.round(((st.bytes || 0) / 1e6))};
     store.set("fj-arc-stat", arcStat);

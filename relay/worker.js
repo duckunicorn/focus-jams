@@ -127,7 +127,7 @@ export class Room extends DurableObject {
 // Shared archive: every projector that knows the same secret key shares one archive of finished
 // nights (room + people stats) and all the photos. Plain HTTP + JSON, stored in SQLite.
 //
-//   GET    /archive/<key>/nights?since=<ms>  → {ids:{id:end}, nights:[changed since], photos:[ids], deleted:[ids], now, stats}
+//   GET    /archive/<key>/nights?since=<ms>  → {ids:{id:end}, nights:[changed since], photos:[ids], deleted:[ids], counts:{night:n}, now, stats}
 //   PUT    /archive/<key>/night              ← a night summary (JSON)
 //   GET    /archive/<key>/photos?night=<id>  → [{id, night, ts, name, emoji, from, thumb}]
 //   PUT    /archive/<key>/photo              ← {id, night, ts, name, emoji, from, thumb, data:"data:image/jpeg;base64,…"}
@@ -170,7 +170,9 @@ export class Archive extends DurableObject {
         const nights = this.sql.exec("SELECT data FROM nights WHERE updated > ?", since).toArray().map(r => JSON.parse(r.data));
         const photos = this.sql.exec("SELECT id FROM photos").toArray().map(r => r.id);
         const deleted = this.sql.exec("SELECT id FROM deleted").toArray().map(r => r.id);
-        return json({ ids, nights, photos, deleted, now, stats: this.stats() });
+        const counts = {};
+        for (const r of this.sql.exec("SELECT night, COUNT(*) AS n FROM photos GROUP BY night")) counts[r.night] = r.n;
+        return json({ ids, nights, photos, deleted, counts, now, stats: this.stats() });
       }
       if (req.method === "PUT" && path === "/night") {
         const n = await req.json();
@@ -179,7 +181,7 @@ export class Archive extends DurableObject {
         if (this.isDeleted(id)) return json({ ok: false, deleted: true });
         const data = JSON.stringify(n);
         if (data.length > 500_000) return json({ error: "too big" }, 413);
-        const ended = +n.end || +n.start || 0;
+        const ended = Math.max(+n.edited || 0, +n.end || 0) || +n.start || 0;   // "edited": photos added later
         const old = this.sql.exec("SELECT ended FROM nights WHERE id = ?", id).toArray()[0];
         if (!old || ended >= old.ended) this.sql.exec("INSERT OR REPLACE INTO nights (id, ended, updated, data) VALUES (?, ?, ?, ?)", id, ended, now, data);
         return json({ ok: true });
