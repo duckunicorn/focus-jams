@@ -64,7 +64,7 @@
   }
   .brand{font-weight:700;font-size:20px;letter-spacing:-.02em;display:flex;align-items:center;gap:10px;text-shadow:0 1px 12px rgba(0,0,0,.35)}
   .brand .dot{width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 18px var(--accent)}
-  .hdr-r{display:flex;align-items:center;gap:12px}
+  .hdr-r{display:flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end;min-width:0}
   .count{font-size:14px;opacity:.85;text-shadow:0 1px 10px rgba(0,0,0,.35)}
   .grid{display:grid;grid-template-columns:1.05fr 1fr;gap:18px;align-items:start}
   @media (max-width:820px){.grid{grid-template-columns:1fr}}
@@ -435,6 +435,7 @@
       <button class="ghost sm" id="nightBtn" hidden title="End tonight and show the recap">🏁 End night</button>
       <button class="ghost sm" id="stageBtn" title="Projector mode (F)">📽 Projector</button>
       <button class="ghost sm" id="jamOpen">📱 Jam QR</button>
+      <button class="ghost sm" id="arcOpen">📚 Archive</button>
       <button class="ghost sm" id="lookOpen">🎨 Customize</button>
     </div>
   </header>
@@ -713,6 +714,30 @@
 </div>
 
 <!-- CUSTOMIZE -->
+<dialog id="arcDlg">
+  <div class="dlg">
+    <div class="dlg-h"><h2>📚 Archive</h2><button class="big sm" id="arcClose">Done</button></div>
+      <h3 style="margin-top:6px">Nights</h3>
+      <div id="histNights"></div>
+      <h3>People (all time)</h3>
+      <div id="histPeople"></div>
+      <div class="testrow"><button class="ghost sm" id="histClear">Clear history</button></div>
+      <h3>📚 Shared archive</h3>
+      <p class="hint" style="margin-top:0">Keeps every finished night (room and people stats) and every photo on your sync server, so all your Focus Jams screens share one history and one photo archive. Set it up on one computer, then paste the same key on the others.</p>
+      <div id="arcOff">
+        <div class="testrow" style="margin-top:0"><button class="big sm" id="arcCreate">Create a shared archive</button></div>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="arcKeyIn" placeholder="Or paste a key from another computer" autocomplete="off" spellcheck="false">
+          <button class="ghost" id="arcJoin">Join</button>
+        </div>
+      </div>
+      <div id="arcOn" hidden>
+        <div class="copyrow"><code id="arcKey"></code><button class="ghost sm" id="arcCopy">Copy key</button><button class="ghost sm" id="arcSyncBtn">Sync now</button><button class="ghost sm" id="arcLeave">Disconnect</button></div>
+      </div>
+      <p class="hint" id="arcMsg"></p>
+  </div>
+</dialog>
+
 <dialog id="look">
   <div class="dlg">
     <div class="dlg-h"><h2>Customize</h2><button class="big sm" id="lookClose">Done</button></div>
@@ -844,19 +869,6 @@
       </div>
       <p class="hint" id="srvMsg" style="margin-top:0">Paste the address of your own Cloudflare sync server here. Phones and this screen then sync through it, with no usage limits to worry about. Leave it empty to use the free public services instead.</p>
 
-      <h3>📚 Shared archive</h3>
-      <p class="hint" style="margin-top:0">Keeps every finished night (room and people stats) and every photo on your sync server, so all your Focus Jams screens share one history and one photo archive. Set it up on one computer, then paste the same key on the others.</p>
-      <div id="arcOff">
-        <div class="testrow" style="margin-top:0"><button class="big sm" id="arcCreate">Create a shared archive</button></div>
-        <div class="row" style="margin-top:8px">
-          <input type="text" id="arcKeyIn" placeholder="Or paste a key from another computer" autocomplete="off" spellcheck="false">
-          <button class="ghost" id="arcJoin">Join</button>
-        </div>
-      </div>
-      <div id="arcOn" hidden>
-        <div class="copyrow"><code id="arcKey"></code><button class="ghost sm" id="arcCopy">Copy key</button><button class="ghost sm" id="arcSyncBtn">Sync now</button><button class="ghost sm" id="arcLeave">Disconnect</button></div>
-      </div>
-      <p class="hint" id="arcMsg"></p>
 
       <h3>Group features</h3>
       <p class="hint" style="margin-top:0">These use phone sync: people scan the QR code, pick a name, and their phone talks to this screen.</p>
@@ -882,17 +894,14 @@
       </div>
       <p class="hint">They use the volume from the Timer tab. Upload your own sounds there, and they show up in these lists too.</p>
 
+      <p class="hint">Past nights, all-time stats for each person, photos and the shared archive are under the <b>📚 Archive</b> button at the top of the screen.</p>
+
       <h3>Tonight</h3>
       <div class="testrow" style="margin-top:0">
         <button class="big sm" id="endNightBtn">🏁 End tonight &amp; show the recap</button>
       </div>
       <p class="hint" id="nightInfo"></p>
 
-      <h3>Room history</h3>
-      <div id="histNights"></div>
-      <h3>People (all time)</h3>
-      <div id="histPeople"></div>
-      <div class="testrow"><button class="ghost sm" id="histClear">Clear history</button></div>
     </div>
 
     <div id="dlgBackup" class="dpane" hidden>
@@ -2076,7 +2085,19 @@ checks.forEach(k => {
 });
 
 /* customize dialog */
-$("lookOpen").onclick = () => { renderLookUI(); renderPlUI(); renderVizUI(); renderGroupUI(); $("look").showModal(); };
+function openDlg(dlg, renders){
+  const errs = [];
+  for(const f of renders){ try{ f(); }catch(e){ errs.push((f.name || "?") + ": " + (e && e.message || e)); console.error(e); } }
+  document.querySelectorAll("dialog[open]").forEach(d => { if(d !== dlg) try{ d.close(); }catch(e){} });
+  try{ if(dlg.open) dlg.close(); dlg.showModal(); }
+  catch(e){ try{ dlg.setAttribute("open", ""); }catch(e2){} errs.push("open: " + (e && e.message || e)); }
+  if(errs.length){ const n = dlg.querySelector(".dlg-err") || dlg.querySelector(".dlg").insertAdjacentElement("afterbegin", Object.assign(document.createElement("p"), {className:"hint dlg-err"}));
+    n.textContent = "⚠️ Part of this didn't load (" + errs.join("; ") + "). Please tell me this message."; }
+}
+$("lookOpen").onclick = () => openDlg($("look"), [renderLookUI, renderPlUI, renderVizUI, renderGroupUI]);
+$("arcOpen").onclick = () => { openDlg($("arcDlg"), [renderGroupUI]); if(S.archiveKey && (!arcStat || Date.now() - arcStat.at > 60000)) archSoon(1); };
+$("arcClose").onclick = () => $("arcDlg").close();
+$("arcDlg").onclick = e => { if(e.target === $("arcDlg")) $("arcDlg").close(); };
 $("dlgTabs").onclick = e => {
   const b = e.target.closest("button"); if(!b) return;
   document.querySelectorAll("#dlgTabs button").forEach(x => x.classList.toggle("on", x === b));
@@ -3533,10 +3554,10 @@ $("nightBtn").onclick = () => { if(window.FJ_AUTO_CONFIRM || confirm("End tonigh
 $("histNights").onclick = e => {
   const v = e.target.closest("[data-recap]"), a = e.target.closest("[data-album]");
   const find = id => getHist().nights.find(x => x.id === id);
-  if(v && find(v.dataset.recap)){ $("look").close(); showRecap(find(v.dataset.recap)); }
+  if(v && find(v.dataset.recap)){ $("arcDlg").close(); showRecap(find(v.dataset.recap)); }
   if(a && find(a.dataset.album)) downloadAlbum(find(a.dataset.album));
   const br = e.target.closest("[data-browse]"), dl = e.target.closest("[data-del]");
-  if(br && find(br.dataset.browse)){ $("look").close(); albumOpen("projector", br.dataset.browse); }
+  if(br && find(br.dataset.browse)){ $("arcDlg").close(); albumOpen("projector", br.dataset.browse); }
   if(dl && find(dl.dataset.del)) deleteNight(dl.dataset.del);
 };
 $("histClear").onclick = async () => {
@@ -3653,18 +3674,18 @@ function renderArcUI(){
   $("arcOff").hidden = on; $("arcOn").hidden = !on;
   $("arcKey").textContent = S.archiveKey.replace(/(.{4})(?=.)/g, "$1-");
   if(arcBusy) return;
-  if(!normHost(S.syncServer)) arcSay(on ? "⚠️ Needs your sync server (above) to work." : "Set up Your sync server above first: the archive is stored there.");
+  if(!normHost(S.syncServer)) arcSay(on ? "⚠️ Needs your sync server (Customize → 👥 Group → Your sync server) to work." : "Set up your sync server first (Customize → 👥 Group → Your sync server): the archive is stored there.");
   else if(on && arcStat) arcSay(`✅ Shared · ${arcStat.nights} nights · ${arcStat.photos} photos (${arcStat.mb} MB) · synced ${new Date(arcStat.at).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"})}`);
   else if(on) arcSay("Connected. Syncing soon…");
   else arcSay("");
 }
 const arcKeyNorm = v => String(v || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 async function arcConnect(key, isNew){
-  if(!normHost(S.syncServer)){ arcSay("Set up Your sync server above first: the archive is stored there."); return; }
+  if(!normHost(S.syncServer)){ arcSay("Set up your sync server first (Customize → 👥 Group → Your sync server): the archive is stored there."); return; }
   const old = S.archiveKey;
   S.archiveKey = key;
   try{ await archJson("GET", "/"); }
-  catch(e){ S.archiveKey = old; arcSay("❌ Couldn't reach the archive on your sync server (" + e.message + "). If you set the server up before this feature existed, Cloudflare updates it automatically within a few minutes of the update."); return; }
+  catch(e){ S.archiveKey = old; arcSay("❌ Couldn't reach the archive on your sync server (" + e.message + "). If you set the server up before this feature existed, Cloudflare updates it automatically within a few minutes of the update. Make sure Customize → 👥 Group → Your sync server is filled in."); return; }
   save(); arcStat = null; store.set("fj-arc-stat", null);
   renderGroupUI(); arcSay(isNew ? "Created! Copy the key and paste it on your other Focus Jams screens. Uploading this computer's history…" : "Joined! Merging this computer's history with the archive…");
   archSync();
