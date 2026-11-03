@@ -1537,7 +1537,13 @@ let auth = store.get("fj-auth");
 let refreshing = null, pollT = null, lastPoll = 0, appIntent = null, appUri = null;
 let np = {playing:false, prog:0, at:0, dur:0, has:false};
 
-function setAppMsg(t){ $("appMsg").textContent = t || ""; }
+// a failed command's message stays up for a while; a later successful status check shouldn't wipe it instantly
+var appMsgAt = 0;
+function setAppMsg(t, fromPoll){
+  if(!t && fromPoll && Date.now() - appMsgAt < 30000) return;
+  if(t) appMsgAt = Date.now();
+  $("appMsg").textContent = t || "";
+}
 function b64url(buf){ return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,""); }
 function randomStr(n){ const a = new Uint8Array(n); crypto.getRandomValues(a); return b64url(a); }
 
@@ -1580,16 +1586,21 @@ async function api(method, path, body){
   let r = await call(await token());
   if(r.status === 401) r = await call(await refreshTok());
   if(r.status === 204) return null;
-  if(!r.ok){ let msg = ""; try{ msg = (await r.json()).error.message; }catch(e){} throw {status:r.status, msg}; }
+  if(!r.ok){ let msg = "", reason = ""; try{ const j = (await r.json()).error; msg = j.message || ""; reason = j.reason || ""; }catch(e){} throw {status:r.status, msg, reason}; }
   const txt = await r.text();
   return txt ? JSON.parse(txt) : null;
 }
 function errText(e){
   switch(e && e.status){
     case 401: return "Spotify sign-in expired — connect again.";
-    case 403: return "Spotify said no. Controls need Premium, and in someone else's Jam the host has to let guests control it.";
+    case 403:
+      if(/registered|developer\.spotify|dashboard/i.test(e.msg || ""))
+        return "Spotify hasn't approved this Spotify account for your Focus Jams app yet. On developer.spotify.com → Dashboard → your app → User Management, add this account's name and email (up to 5 people), then connect again.";
+      if(/premium/i.test((e.reason || "") + (e.msg || "")))
+        return "Spotify only lets apps control playback on Premium accounts. Sign in with a Premium account, or switch Customize → Music to the built-in player.";
+      return "Spotify said no (" + (e.msg || "403") + "). Controls need Premium, and in someone else's Jam the host has to let guests control it.";
     case 404: return /context/i.test(e.msg || "")
-      ? "Spotify won't let this app play that playlist. Pick one of your own playlists in Customize → Music."
+      ? "Spotify won't let this app start that playlist (Spotify blocks some of its own playlists for small apps). Paste a link to one of your own playlists in Customize → Music."
       : "No active Spotify device — press play in the Spotify app first.";
     case 429: return "Spotify asked us to slow down — will retry shortly.";
     default:  return (e && e.msg) || "Couldn't reach Spotify — check your connection.";
@@ -1636,7 +1647,7 @@ async function poll(){
   lastPoll = Date.now();
   try{
     const d = await api("GET", "/me/player?additional_types=episode");
-    renderNP(d); setAppMsg("");
+    renderNP(d); setAppMsg("", true);
   }catch(e){
     if(e.status === 401){ setAppMsg(errText(e)); return; }
     setAppMsg(errText(e));
