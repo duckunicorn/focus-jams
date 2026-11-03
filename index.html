@@ -1996,7 +1996,8 @@ renderPlUI();
 /* lyrics */
 function updateLyrBtns(){
   syncSoon();
-  if(typeof renderVizSwatches === "function" && S.vizColors === "album") renderVizSwatches();
+  // (only once the page has finished starting up: the visualizer's color code is set up further down)
+  if(window.FJ_READY && S.vizColors === "album") try{ renderVizSwatches(); }catch(e){ console.error(e); }
   const ok = !!(curTrack && curTrack.uri && /^spotify:track:/.test(curTrack.uri));
   ["lyrEmbed","lyrApp"].forEach(id => { $(id).disabled = !ok; $(id).title = ok ? "Lyrics & karaoke" : "Play a song first"; });
   if($("lyr").open) fillLyrics();
@@ -2790,7 +2791,7 @@ function loadArtPalette(url){
 // the colors the visualizer uses right now, or null for rainbow
 function vizPalette(){
   if(S.vizColors === "album"){
-    const url = curTrack && curTrack.art;
+    const url = (curTrack && curTrack.art) || "";
     if(url !== artPalUrl) loadArtPalette(url);
     return artPal;
   }
@@ -4144,6 +4145,7 @@ document.addEventListener("keydown", e => {
 
 /* ================= start up ================= */
 (async function init(){
+  window.FJ_READY = true;
   if(SYNC) return startPhone();
   const resume = restoreTimer();
   startHost();
