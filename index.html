@@ -344,6 +344,11 @@
   .ptable{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
   .ptable th{text-align:left;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:4px 6px}
   .ptable td{padding:6px;border-top:1px solid var(--line)}
+  .pth{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+  .parr{display:inline-flex;flex-direction:column;line-height:1}
+  .psort{all:unset;cursor:pointer;font-size:9px;padding:1px 3px;color:var(--muted);opacity:.55;border-radius:3px}
+  .psort:hover{opacity:1;background:rgba(255,255,255,.08)}
+  .psort.on{color:var(--accent);opacity:1}
   /* phone: me / recap / history */
   .ph-me .row{margin:10px 0 0}
   .ph-name{display:flex;justify-content:space-between;align-items:center;gap:10px}
@@ -3522,14 +3527,31 @@ function renderGroupUI(){
       ${minsTxt(r.focusMs)} focused · ${r.sessions} sessions · ${r.people.length} people · ${r.goalsDone} goals${r.photos ? ` · 📸 ${r.photos}` : ""}</div>
       <div class="testrow" style="margin:0"><button class="ghost sm" data-recap="${r.id}">View</button>${r.photos ? `<button class="ghost sm" data-browse="${r.id}">🖼 Photos</button><button class="ghost sm" data-album="${r.id}">⬇ .zip</button><button class="ghost sm" data-addzip="${r.id}" hidden title="This night's ${r.photos} photos aren't saved anywhere: add them back from a .zip">⬆ Add photos (.zip)</button>` : ""}<button class="ghost sm" data-del="${r.id}" title="Delete this night">🗑</button></div></div>`).join("")
     : `<p class="hint" style="margin:0">Finished nights show up here.</p>`;
-  const ppl = Object.entries(h.people).sort((a,b) => b[1].focusMs - a[1].focusMs);
-  $("histPeople").innerHTML = ppl.length ? `<table class="ptable"><tr><th>Name</th><th>Nights</th><th>Focus</th><th>Sessions</th><th>Goals</th><th>📵</th></tr>` +
-    ppl.slice(0, 200).map(([id, a]) => `<tr><td>${a.emoji} ${escH(a.name)}</td><td>${a.nights}</td><td>${minsTxt(a.focusMs)}</td><td>${a.sessions}</td><td>${a.goalsDone}</td><td>${a.jailVisits}</td></tr>`).join("") + `</table>`
-    : `<p class="hint" style="margin:0">People who join show up here after the night ends.</p>`;
+  renderPeopleTable(h);
   $("histClear").hidden = !!S.archiveKey;
   renderArcUI();
   markMissingPhotos();
 }
+// all-time people table: ▲ sorts a column low→high (A→Z for names), ▼ high→low
+var pSort = store.get("fj-psort") || {key:"focusMs", dir:-1};
+const P_COLS = [["name","Name"],["nights","Nights"],["focusMs","Focus"],["sessions","Sessions"],["goalsDone","Goals"],["jailVisits","📵"]];
+function renderPeopleTable(h){
+  h = h || getHist();
+  const k = P_COLS.some(c => c[0] === pSort.key) ? pSort.key : "focusMs", d = pSort.dir === 1 ? 1 : -1;
+  const ppl = Object.values(h.people).sort((a,b) => {
+    const c = k === "name" ? String(a.name || "").localeCompare(String(b.name || ""), undefined, {sensitivity:"base"}) : (a[k] || 0) - (b[k] || 0);
+    return c * d || (b.focusMs || 0) - (a.focusMs || 0);
+  });
+  const arrow = (key, dir, sym, tip) => `<button class="psort${k === key && d === dir ? " on" : ""}" data-psort="${key}" data-dir="${dir}" title="${tip}" aria-label="${tip}">${sym}</button>`;
+  const head = P_COLS.map(([key, label]) => `<th><span class="pth">${label}<span class="parr">${arrow(key, 1, "▲", "Sort " + label + (key === "name" ? " A to Z" : " lowest first"))}${arrow(key, -1, "▼", "Sort " + label + (key === "name" ? " Z to A" : " highest first"))}</span></span></th>`).join("");
+  $("histPeople").innerHTML = ppl.length ? `<table class="ptable"><tr>${head}</tr>` +
+    ppl.slice(0, 200).map(a => `<tr><td>${a.emoji} ${escH(a.name)}</td><td>${a.nights}</td><td>${minsTxt(a.focusMs)}</td><td>${a.sessions}</td><td>${a.goalsDone}</td><td>${a.jailVisits}</td></tr>`).join("") + `</table>`
+    : `<p class="hint" style="margin:0">People who join show up here after the night ends.</p>`;
+}
+$("histPeople").onclick = e => {
+  const b = e.target.closest("[data-psort]"); if(!b) return;
+  pSort = {key:b.dataset.psort, dir:+b.dataset.dir}; store.set("fj-psort", pSort); renderPeopleTable();
+};
 // a night remembers how many photos it had; if none of them are on this computer or in the shared archive, offer to add them back
 async function nightPhotoCount(id){
   try{ return (await idbDo("readonly", st => st.index("night").count(id), "photos")) || 0; }catch(e){ return 0; }
