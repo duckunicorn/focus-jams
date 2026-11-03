@@ -449,6 +449,7 @@
       <button class="ghost sm" id="nightBtn" hidden title="End tonight and show the recap">🏁 End night</button>
       <button class="ghost sm" id="stageBtn" title="Projector mode (F)">📽 Projector</button>
       <button class="ghost sm" id="jamOpen">📱 Jam QR</button>
+      <button class="ghost sm" id="guideBtn" title="Setup guide" aria-label="Setup guide">🧭</button>
       <button class="ghost sm" id="arcOpen">📚 Archive</button>
       <button class="ghost sm" id="lookOpen">🎨 Customize</button>
     </div>
@@ -753,6 +754,23 @@
   </div>
 </dialog>
 
+<dialog id="nightDlg">
+  <div class="dlg">
+    <div class="dlg-h"><h2>🌙 A new night begins</h2><button class="big sm" id="ndGo">Let's go</button></div>
+    <p class="sub">Where are you tonight? The name shows on phones, in the recap and in the archive.</p>
+    <div class="row" style="margin-top:8px"><input type="text" id="ndRoom" maxlength="40" placeholder="Room name, e.g. Library 3rd floor"></div>
+    <div id="ndRecent" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px"></div>
+    <p class="sub" style="margin-top:14px">Tonight's group features:</p>
+    <div class="toggles" style="margin-top:6px">
+      <label><input type="checkbox" data-ndg="gGoals"> 🎯 Goals wall</label>
+      <label><input type="checkbox" data-ndg="gJail"> 📵 Phone jail</label>
+      <label><input type="checkbox" data-ndg="gStats"> 📊 Group stats</label>
+      <label><input type="checkbox" data-ndg="gPhotos"> 📸 Photo album</label>
+    </div>
+    <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:12px"><input type="checkbox" id="ndAsk"> Ask this at the start of every night</label>
+  </div>
+</dialog>
+
 <dialog id="setupDlg">
   <div class="dlg">
     <div class="dlg-h"><h2 id="suTitle">Welcome to Focus Jams</h2><button class="ghost sm" id="suClose">Close</button></div>
@@ -767,6 +785,9 @@
         <li><b>Shared archive:</b> history and photos shared between all your screens.</li>
         <li><b>Your room:</b> a name for this screen.</li>
       </ol>
+      <div class="note" style="margin-top:12px"><b>Used Focus Jams before on another computer?</b> Load your settings backup (Customize → 💾 Backup → Download backup there) to bring everything over and skip the setup.
+        <div class="testrow" style="margin-top:8px"><label class="big sm btnlink" style="color:var(--accent-ink);cursor:pointer">⬆ Load a backup<input type="file" id="suImport" accept=".json,application/json" hidden></label></div>
+        <p class="hint" id="suImpMsg" style="margin:6px 0 0"></p></div>
     </div>
 
     <div class="su-step" data-su="1" hidden>
@@ -834,7 +855,7 @@
         <li>Press <b>Start</b> (or Space) to begin a focus session. <b>F</b> switches projector view.</li>
         <li>Phones scan <b>Scan to follow along</b>. <b>Show big</b> makes the code huge.</li>
         <li>Colors, sounds, playlists and more: <b>🎨 Customize</b>. Past nights and photos: <b>📚 Archive</b>.</li>
-        <li>Open this guide again any time: <b>Customize → 💾 Backup → Setup guide</b>.</li>
+        <li>Open this guide again any time with the <b>🧭</b> button at the top of the screen.</li>
       </ul>
     </div>
 
@@ -986,6 +1007,7 @@
         <label><input type="checkbox" id="s-gJail"> 📵 Phone jail: leaving the Focus Jams page during focus puts your name in “phone jail” on screen</label>
         <label><input type="checkbox" id="s-gStats"> 📊 Group stats: focus minutes and sessions for each person</label>
         <label><input type="checkbox" id="s-gPhotos"> 📸 Photo album: phones add photos, and the night ends with a group collage</label>
+        <label><input type="checkbox" id="s-askNight"> 🌙 Ask for the room name and tonight's features when a new night starts</label>
       </div>
       <div class="sounds">
         <label>Room name<input type="text" id="s-roomName" maxlength="40" placeholder="Focus Jams room"></label>
@@ -1139,7 +1161,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              focusSound:"chime", breakSound:"bell", volume:70, repeat:1, jamLink:"",
              clock24:false, clockSec:false, stage:true, phoneSync:true, syncCode:"",
              viz:true, vizLevel:"party", vizColors:"rainbow", vizSrc:"system", vizStrobe:false, vizBpm:124, vizDev:"", vizSens:35, vizDecay:50,
-             vizStopAtEnd:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
+             vizStopAtEnd:true, askNight:true, endMsgOn:true, endMsg:"Now time to focus!", endMsgSecs:5,
              sndJailIn:"siren", sndJailOut:"unlock", sndGoal:"fanfare", sndPhoto:"shutter",
              fadeMusic:true, fadeSecs:4,
              gGoals:true, gJail:true, gStats:true, gPhotos:true, jailGrace:20, roomName:"", deviceId:"", syncServer:"", archiveKey:"",
@@ -3204,6 +3226,7 @@ function ensureNight(){
   night = {id:newCode(), room:roomName(), start:Date.now(), last:Date.now(), focusMs:0, sessions:0, goalsDone:0, jailVisits:0, photos:0, people:{}};
   people = night.people; lastRecap = null;
   saveNight(); renderCrew(); syncSoon();
+  if(S.askNight) setTimeout(ndOpen, 300);
   return night;
 }
 function saveNight(now){
@@ -3623,7 +3646,7 @@ async function showRecap(r){
 /* ----- Customize → Group ----- */
 function renderGroupUI(){
   if(SYNC) return;
-  ["gGoals","gJail","gStats","gPhotos"].forEach(k => $("s-"+k).checked = S[k]);
+  ["gGoals","gJail","gStats","gPhotos","askNight"].forEach(k => $("s-"+k).checked = S[k]);
   $("s-roomName").value = S.roomName; $("s-jailGrace").value = String(S.jailGrace);
   if(document.activeElement !== $("s-syncServer")) $("s-syncServer").value = S.syncServer;
   $("nightInfo").textContent = !gOn() ? "Turn on phone sync (Timer tab) and use your GitHub Pages link to use group features."
@@ -3679,7 +3702,7 @@ async function markMissingPhotos(){
     b.closest(".testrow").querySelectorAll("[data-browse],[data-album]").forEach(x => x.hidden = miss);
   }
 }
-["gGoals","gJail","gStats","gPhotos"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); renderCrew(); syncSoon(); });
+["gGoals","gJail","gStats","gPhotos","askNight"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); renderCrew(); syncSoon(); });
 $("s-syncServer").onchange = e => {
   const h = normHost(e.target.value); e.target.value = h;
   if(h === normHost(S.syncServer)) return;
@@ -4449,6 +4472,14 @@ $("suSkip").onclick = () => suGo(1);
 $("suClose").onclick = () => { suSave({done:true}); $("setupDlg").close(); };
 $("setupDlg").addEventListener("cancel", () => suSave({done:true}));
 $("suOpen").onclick = () => { $("look").close(); suOpen(0); };
+$("guideBtn").onclick = () => suOpen(0);
+$("suImport").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if(!f) return;
+  await importBackup(f);
+  const m = $("bkMsg").textContent;
+  $("suImpMsg").textContent = m;
+  if(/^Loaded/.test(m)) suSave({resume:true, step:SU_N - 1, done:true});   // after the reload, show the summary
+};
 // 1 · music
 document.querySelectorAll('[name="suMusic"]').forEach(r => r.onchange = () => {
   const m = document.querySelector('[name="suMusic"]:checked').value;
@@ -4492,6 +4523,29 @@ function suMaybeStart(){
   if(!st && (SAVED_BEFORE || store.get("fj-hist"))){ suSave({done:true}); return; }
   suOpen(st ? st.step : 0);
 }
+
+/* ----- start of each night: room name and tonight's features ----- */
+function ndOpen(){
+  if(SYNC || !night || document.querySelector("dialog[open]")) return;   // don't cover the setup guide or another window
+  $("ndRoom").value = S.roomName;
+  const recent = [...new Set(getHist().nights.map(r => r.room).filter(Boolean))].slice(0, 6);
+  $("ndRecent").innerHTML = recent.map(r => `<button class="chip" data-ndr="${escH(r)}">${escH(r)}</button>`).join("");
+  document.querySelectorAll("[data-ndg]").forEach(c => c.checked = !!S[c.dataset.ndg]);
+  $("ndAsk").checked = S.askNight;
+  openDlg($("nightDlg"), []);
+  setTimeout(() => { $("ndRoom").focus(); $("ndRoom").select(); }, 50);
+}
+function ndSave(){
+  S.roomName = clean($("ndRoom").value, 40); save();
+  if(night){ night.room = roomName(); saveNight(true); }
+  renderCrew(); syncSoon();
+}
+$("ndRecent").onclick = e => { const b = e.target.closest("[data-ndr]"); if(b){ $("ndRoom").value = b.dataset.ndr; } };
+$("ndRoom").onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); $("ndGo").click(); } };
+document.querySelectorAll("[data-ndg]").forEach(c => c.onchange = () => { S[c.dataset.ndg] = c.checked; save(); renderCrew(); syncSoon(); });
+$("ndAsk").onchange = e => { S.askNight = e.target.checked; save(); };
+$("ndGo").onclick = () => { ndSave(); $("nightDlg").close(); };
+$("nightDlg").addEventListener("close", ndSave);
 
 /* ================= start up ================= */
 (async function init(){
