@@ -1596,11 +1596,41 @@ function errText(e){
   }
 }
 function disconnect(){
-  auth = null; store.set("fj-auth", null); clearInterval(pollT);
+  auth = null; store.set("fj-auth", null); clearInterval(pollT); meName = null; npHint = "";
   np.has = false; renderApp(); renderMini(null);
 }
 const mmss = ms => { const s = Math.max(0, Math.floor(ms/1000)); return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); };
 
+// When Spotify reports nothing, say why: which account is signed in, and whether any Spotify app is open on it.
+var npHint = "", npDiagAt = 0, meName = null;
+async function npDiagnose(){
+  if(Date.now() - npDiagAt < 15000) return;
+  npDiagAt = Date.now();
+  try{
+    if(meName === null){ const me = await api("GET", "/me"); meName = (me && (me.display_name || me.id)) || ""; }
+    const devs = await spDevices();
+    const who = meName ? `Signed in as ${meName}. ` : "";
+    npHint = !devs.length
+      ? who + "Spotify isn't open anywhere on this account. Open the Spotify app (on this computer or a phone) and press play, or join the Jam there. If the Jam is on someone else's account, sign in here with theirs."
+      : who + `Spotify is open on ${devs.map(d => d.name).slice(0, 3).join(", ")} but nothing is playing. Press ▶ here or play something there.`;
+  }catch(e){ npHint = ""; }
+  if(!np.has) $("npArtist").textContent = npHint || "Start or join a Jam in the Spotify app and it'll show up here.";
+}
+async function spDevices(){
+  const d = await api("GET", "/me/player/devices");
+  return (d && d.devices || []).filter(x => !x.is_restricted);
+}
+// "Play" when no device is active (common right after opening Spotify on a Mac): pick an open one and play there
+async function playAnywhere(body){
+  try{ return await api("PUT", "/me/player/play", body); }
+  catch(e){
+    if(e.status !== 404 || /context/i.test(e.msg || "")) throw e;
+    const devs = await spDevices();
+    if(!devs.length) throw e;
+    const pick = devs.find(d => d.is_active) || devs.find(d => /computer/i.test(d.type)) || devs[0];
+    return await api("PUT", "/me/player/play?device_id=" + encodeURIComponent(pick.id), body);
+  }
+}
 async function poll(){
   if(S.src !== "app" || !auth) return;
   lastPoll = Date.now();
@@ -1625,7 +1655,8 @@ function renderNP(d){
     $("npArt").removeAttribute("src");
     $("npDev").textContent = "Spotify";
     $("npTitle").textContent = "Nothing playing";
-    $("npArtist").textContent = "Start or join a Jam in the Spotify app and it'll show up here.";
+    $("npArtist").textContent = npHint || "Start or join a Jam in the Spotify app and it'll show up here.";
+    npDiagnose();
     $("npPlay").textContent = "▶";
     renderMini(null); updateProgress();
     curTrack = null; updateLyrBtns(); return;
@@ -1702,7 +1733,7 @@ function appTransition(kind, body){
     appEnqueue(async () => {
       if(fade && body && wasPlaying && startVol > 0) await fadeVol(startVol, 0, secs);   // switching playlists: fade out first
       if(fade && !(body && wasPlaying)) await setVol(0).catch(() => {});
-      await api("PUT", "/me/player/play", body);
+      await playAnywhere(body);
       if(fade) await fadeVol(0, target, secs);
     });
   }
@@ -1803,7 +1834,8 @@ $("disconnect").onclick = e => { e.preventDefault(); disconnect(); setAppMsg("Di
 $("npPlay").onclick = () => {
   np.prog = Math.min(np.dur, np.prog + (np.playing ? Date.now() - np.at : 0)); np.at = Date.now();
   np.playing = !np.playing; $("npPlay").textContent = np.playing ? "❚❚" : "▶";
-  appCmd("PUT", np.playing ? "/me/player/play" : "/me/player/pause");
+  if(np.playing){ playAnywhere().then(() => setTimeout(poll, 600)).catch(e => setAppMsg(errText(e))); }
+  else appCmd("PUT", "/me/player/pause");
 };
 $("npNext").onclick = () => appCmd("POST", "/me/player/next");
 $("npPrev").onclick = () => appCmd("POST", "/me/player/previous");
@@ -2544,8 +2576,13 @@ function vizAttach(stream){
 function vizDetach(){ if(vizSrcNode) try{ vizSrcNode.disconnect(); }catch(e){} vizSrcNode = null; vizAnalyser = null; }
 const NO_VOICE_FX = {echoCancellation:false, noiseSuppression:false, autoGainControl:false};
 
+// Safari (and every browser on iPhone/iPad) can share the screen but never its sound
+var IS_SAFARI = /safari/i.test(navigator.userAgent) && !/chrome|chromium|crios|fxios|edg|opr|android/i.test(navigator.userAgent);
+var IS_MAC = /Macintosh|Mac OS X/.test(navigator.userAgent);
+var NO_SYS_AUDIO_MSG = "Safari can't share the computer's sound (Apple doesn't allow it). Open Focus Jams in Chrome on this Mac instead, or pick “Microphone” or “Steady beat” above.";
 async function vizStartSystem(){
   if(vizSysStream) return true;
+  if(IS_SAFARI){ vizMsg(NO_SYS_AUDIO_MSG); return false; }
   if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){ vizMsg("This browser can't share the computer's sound. Use Chrome or Edge, or pick a microphone instead."); return false; }
   try{
     // the browser shows its own picker; a tiny, slow video track is required but unused
@@ -2554,7 +2591,9 @@ async function vizStartSystem(){
       audio:NO_VOICE_FX, systemAudio:"include", selfBrowserSurface:"include", surfaceSwitching:"exclude"});
     if(!st.getAudioTracks().length){
       st.getTracks().forEach(t => t.stop());
-      vizMsg("No sound was shared. Try again: choose “Entire screen” and turn on “Also share system audio” (or pick this tab and turn on “Also share tab audio”).");
+      vizMsg(IS_MAC
+        ? "No sound was shared. Try again: on a Mac, pick the Chrome tab that's playing Spotify (open.spotify.com) and turn on “Also share tab audio”. To use the Spotify app instead, choose “Entire screen” and turn on “Share system audio” (Chrome 141 or newer and macOS 14.2 or newer)."
+        : "No sound was shared. Try again: choose “Entire screen” and turn on “Also share system audio” (or pick this tab and turn on “Also share tab audio”).");
       return false;
     }
     vizSysStream = st;
@@ -2621,8 +2660,9 @@ function vizUpdate(){
   document.body.classList.toggle("viz", want);
   document.body.classList.toggle("vizprev", want && vizPreview && !(isBreak() && running));
   $("vizBadge").textContent = vizPreview && !(isBreak() && running) ? "Visualizer preview · press V to stop" : "☕ " + LABELS[mode];
-  document.body.classList.toggle("needsound", want && S.vizSrc === "system" && !vizSysStream);
+  document.body.classList.toggle("needsound", want && S.vizSrc === "system" && !vizSysStream && !IS_SAFARI);
   if(want && S.vizSrc === "system" && vizSysStream && !vizAnalyser) vizAttach(vizSysStream);
+  if(want && S.vizSrc === "system" && IS_SAFARI && !vizOn) vizMsg(NO_SYS_AUDIO_MSG);
   if(want && !vizOn){
     vizOn = true; vizResize(); vizParts = [];
     if(S.vizSrc === "mic") vizStartMic(false);
@@ -2868,7 +2908,9 @@ function renderVizUI(){
   $("vizSys").hidden = S.vizSrc !== "system";
   $("vizSys").textContent = vizSysStream ? "🔊 Connected (click to reconnect)" : "🔊 Connect computer sound";
   $("vizDevRow").hidden = S.vizSrc !== "mic";
-  $("vizHow").textContent = VIZ_HOW[S.vizSrc] || "";
+  $("vizHow").textContent = S.vizSrc === "system" && IS_SAFARI ? NO_SYS_AUDIO_MSG
+    : S.vizSrc === "system" && IS_MAC ? "Click “Connect computer sound” once each time you open Focus Jams. On a Mac, Chrome can share the sound of one tab: play Spotify in a Chrome tab (open.spotify.com), pick that tab and turn on “Also share tab audio”. Chrome 141 or newer on macOS 14.2 or newer can also share the whole computer's sound: choose “Entire screen” and turn on “Share system audio”. Nothing is recorded or sent anywhere."
+    : VIZ_HOW[S.vizSrc] || "";
   if(S.vizSrc === "mic") vizListDevices();
   $("vizPrev").textContent = vizPreview ? "■ Stop preview (V)" : "▶ Preview (V)";
 }
