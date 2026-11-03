@@ -341,6 +341,13 @@
   .recap-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:2vh}
   .hist-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:var(--panel2);border-radius:12px;padding:8px 12px;margin-top:6px;font-size:13px}
   .hist-row b{font-size:14px}
+  #setupDlg{width:min(640px,calc(100% - 32px))}
+  .su-dots{display:flex;gap:6px;margin:2px 0 12px} .su-dots i{flex:1;height:4px;border-radius:2px;background:var(--line)} .su-dots i.on{background:var(--accent)}
+  .su-choice{display:grid;gap:8px;margin:10px 0 14px}
+  .su-choice label{display:flex;gap:10px;align-items:flex-start;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:14px}
+  .su-choice label:has(input:checked){border-color:var(--accent)}
+  .su-choice small{color:var(--muted);font-size:12px}
+  .su-nav{display:flex;gap:8px;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
   .hroom{cursor:pointer;border-radius:4px;padding:0 2px} .hroom:hover{background:rgba(255,255,255,.08)}
   .hroom .hpen{font-size:11px;opacity:.4} .hroom:hover .hpen{opacity:1}
   .hroom-in{font:inherit;font-size:13px;padding:2px 6px;border-radius:6px;width:min(220px,60%)}
@@ -746,6 +753,100 @@
   </div>
 </dialog>
 
+<dialog id="setupDlg">
+  <div class="dlg">
+    <div class="dlg-h"><h2 id="suTitle">Welcome to Focus Jams</h2><button class="ghost sm" id="suClose">Close</button></div>
+    <div class="su-dots" id="suDots"></div>
+
+    <div class="su-step" data-su="0">
+      <p class="sub">A pomodoro timer made for a projector or TV, with music, and everyone's phones following along.</p>
+      <p class="sub" style="margin-top:8px">This guide sets up the parts that need accounts. <b>Every step is optional</b>: skip any of them and the timer still works. Doing everything takes about 15 minutes, once.</p>
+      <ol class="steps" style="margin-top:12px">
+        <li><b>Music:</b> use the built-in Spotify player, or let the timer control your own Spotify app.</li>
+        <li><b>Sync server:</b> your own free Cloudflare server, so phones stay in sync with no limits.</li>
+        <li><b>Shared archive:</b> history and photos shared between all your screens.</li>
+        <li><b>Your room:</b> a name for this screen.</li>
+      </ol>
+    </div>
+
+    <div class="su-step" data-su="1" hidden>
+      <p class="sub">How should Focus Jams play music?</p>
+      <div class="su-choice">
+        <label><input type="radio" name="suMusic" value="embed"> <span><b>Built-in player</b> (no setup)<br><small>Plays Spotify right in this page. Log into Spotify in this browser for full songs (otherwise 30-second previews). Chrome works best.</small></span></label>
+        <label><input type="radio" name="suMusic" value="app"> <span><b>Control my Spotify app</b> (Spotify Premium, about 5 minutes)<br><small>Shows what's playing (Jams too), and the timer starts and pauses your Spotify app and switches focus and break playlists.</small></span></label>
+      </div>
+      <div id="suApp" hidden>
+        <ol class="steps">
+          <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> and log in with your Spotify account. The first time, accept the developer terms (Spotify may ask you to confirm your email).</li>
+          <li>Click <b>Create app</b>. Name: <i>Focus Jams</i>. Description: anything. <b>Redirect URI:</b> paste this and click <b>Add</b>:
+            <div class="copyrow"><code id="suRedir"></code><button class="ghost sm" id="suCopyRedir">Copy</button></div></li>
+          <li>Tick <b>Web API</b>, agree to the terms, click <b>Save</b>.</li>
+          <li>Copy the <b>Client ID</b> from your new app's page and paste it here:
+            <div class="row" style="margin-top:8px"><input type="text" id="suClientId" placeholder="Paste your Client ID" autocomplete="off" spellcheck="false"></div></li>
+          <li>Click <b>Connect Spotify</b>. Spotify asks you to approve, then brings you back to this guide.</li>
+        </ol>
+        <div class="testrow" style="margin-top:0"><button class="big sm" id="suConnect">Connect Spotify</button></div>
+        <p class="hint" id="suAppMsg"></p>
+        <p class="hint">Friends who should sign in with their own Spotify accounts: add their name and email in your app under <b>Settings → User Management</b> (up to 5). Usually only the computer running the big screen signs in.</p>
+      </div>
+    </div>
+
+    <div class="su-step" data-su="2" hidden>
+      <p class="sub">People scan a QR code and their phones follow the timer. That works without setup through free public services, but those have daily limits. Your own <b>sync server</b> has none and also stores the shared archive. It's free on Cloudflare.</p>
+      <ol class="steps" style="margin-top:12px">
+        <li>You need free <a href="https://github.com/signup" target="_blank" rel="noopener">GitHub</a> and <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">Cloudflare</a> accounts.</li>
+        <li>Click <a class="big sm btnlink" id="suDeploy" target="_blank" rel="noopener" href="https://deploy.workers.cloudflare.com/?url=https://github.com/duckunicorn/focus-jams" style="color:var(--accent-ink);display:inline-block;margin:4px 0">☁️ Deploy to Cloudflare</a><br>
+          Log in, connect GitHub when asked, keep the suggested names and click <b>Create and deploy</b>. Cloudflare copies the server into your GitHub and starts it (a minute or two).</li>
+        <li>When it's done, copy the address it shows, ending in <b>.workers.dev</b> (also under <b>Workers &amp; Pages → focus-jams</b>), and paste it here:
+          <div class="row" style="margin-top:8px"><input type="text" id="suServer" placeholder="focus-jams.yourname.workers.dev" autocomplete="off" spellcheck="false"><button class="ghost" id="suTest">Test</button></div></li>
+      </ol>
+      <p class="hint" id="suSrvMsg"></p>
+    </div>
+
+    <div class="su-step" data-su="3" hidden>
+      <p class="sub">The <b>shared archive</b> keeps every finished night (room and people stats) and every photo on your sync server, so all your Focus Jams screens share one history.</p>
+      <div id="suArcNeeds" class="note" hidden>This needs your sync server (previous step). Skip it for now: you can turn it on later under 📚 Archive.</div>
+      <div id="suArcBox">
+        <p class="sub" style="margin-top:10px"><b>First screen?</b> Create a new archive:</p>
+        <div class="testrow" style="margin-top:4px"><button class="big sm" id="suArcCreate">Create a shared archive</button></div>
+        <p class="sub" style="margin-top:12px"><b>Already have one on another screen?</b> Copy its key there (📚 Archive → Copy key) and paste it here:</p>
+        <div class="row" style="margin-top:4px"><input type="text" id="suArcKey" placeholder="Archive key" autocomplete="off" spellcheck="false"><button class="ghost" id="suArcJoin">Join</button></div>
+      </div>
+      <p class="hint" id="suArcMsg"></p>
+      <p class="hint">Anyone with the key can see the archive's photos, so only share it with your group.</p>
+    </div>
+
+    <div class="su-step" data-su="4" hidden>
+      <p class="sub">Give this screen a name. It shows on phones, recaps and in the archive.</p>
+      <div class="row" style="margin-top:8px"><input type="text" id="suRoom" maxlength="40" placeholder="e.g. Library 3rd floor"></div>
+      <p class="sub" style="margin-top:14px">Group features (phones join by scanning the QR code):</p>
+      <div class="toggles" style="margin-top:6px">
+        <label><input type="checkbox" data-sug="gGoals"> 🎯 Goals wall</label>
+        <label><input type="checkbox" data-sug="gJail"> 📵 Phone jail</label>
+        <label><input type="checkbox" data-sug="gStats"> 📊 Group stats</label>
+        <label><input type="checkbox" data-sug="gPhotos"> 📸 Photo album</label>
+      </div>
+    </div>
+
+    <div class="su-step" data-su="5" hidden>
+      <p class="sub" id="suSummary"></p>
+      <ul class="steps" style="margin-top:12px">
+        <li>Press <b>Start</b> (or Space) to begin a focus session. <b>F</b> switches projector view.</li>
+        <li>Phones scan <b>Scan to follow along</b>. <b>Show big</b> makes the code huge.</li>
+        <li>Colors, sounds, playlists and more: <b>🎨 Customize</b>. Past nights and photos: <b>📚 Archive</b>.</li>
+        <li>Open this guide again any time: <b>Customize → 💾 Backup → Setup guide</b>.</li>
+      </ul>
+    </div>
+
+    <div class="su-nav">
+      <button class="ghost sm" id="suBack">← Back</button>
+      <span style="flex:1"></span>
+      <button class="ghost sm" id="suSkip">Skip this step</button>
+      <button class="big sm" id="suNext">Next →</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="look">
   <div class="dlg">
     <div class="dlg-h"><h2>Customize</h2><button class="big sm" id="lookClose">Done</button></div>
@@ -913,6 +1014,9 @@
     </div>
 
     <div id="dlgBackup" class="dpane" hidden>
+      <h3>Setup guide</h3>
+      <div class="testrow" style="margin-top:0"><button class="ghost sm" id="suOpen">🧭 Open the setup guide</button></div>
+      <p class="hint">Walks through Spotify, your sync server, the shared archive and your room name.</p>
       <h3>Back up your setup</h3>
       <p class="sub" style="margin-bottom:10px">Save everything to one file: colors, background (including an uploaded picture), timer and sound settings, your custom sounds with their lengths, playlists, visualizer settings, group settings, Jam link, and room and people history. Load it on another computer or browser to get the same setup.</p>
       <div class="testrow" style="margin-top:0">
@@ -1051,6 +1155,7 @@ const store = {
 };
 const SYNC = (new URLSearchParams(location.search).get("sync") || "").replace(/[^a-z0-9]/gi, "").slice(0, 16);   // phone view
 const SAVED = store.get("fj-settings") || {};
+const SAVED_BEFORE = Object.keys(SAVED).length > 0;   // has this browser used Focus Jams before?
 let S = Object.assign({}, DEF, SAVED);
 if(SAVED.chime === false && !SAVED.focusSound){ S.focusSound = S.breakSound = "none"; }  // older version's "no chime"
 delete S.chime;
@@ -4285,6 +4390,109 @@ document.addEventListener("keydown", e => {
   else if(e.key === " " || e.key === "Enter"){ e.preventDefault(); if(!$("camReview").hidden) camKeep(); else camSnap(); }
 }, true);
 
+
+/* ================= setup guide (first visit, or Customize → Backup) ================= */
+const SU_N = 6, SU_TITLES = ["Welcome to Focus Jams", "1 · Music", "2 · Sync server", "3 · Shared archive", "4 · Your room", "You're all set 🎉"];
+var suStep = 0;
+function suSave(extra){ store.set("fj-setup", Object.assign({}, store.get("fj-setup") || {}, {step:suStep}, extra || {})); }
+function suOpen(step){
+  suStep = Math.max(0, Math.min(SU_N - 1, step || 0));
+  openDlg($("setupDlg"), [suRender]);
+}
+function suRender(){
+  document.querySelectorAll("#setupDlg .su-step").forEach(el => el.hidden = +el.dataset.su !== suStep);
+  $("suTitle").textContent = SU_TITLES[suStep];
+  $("suDots").innerHTML = Array.from({length:SU_N}, (_, i) => `<i class="${i <= suStep ? "on" : ""}"></i>`).join("");
+  $("suBack").style.visibility = suStep ? "" : "hidden";
+  $("suSkip").hidden = !(suStep >= 1 && suStep <= 3);
+  $("suNext").textContent = suStep === 0 ? "Let's go →" : suStep === SU_N - 1 ? "Start using Focus Jams" : "Next →";
+  if(suStep === 1){
+    const m = S.src === "app" || (store.get("fj-setup") || {}).music === "app" ? "app" : "embed";
+    document.querySelectorAll('[name="suMusic"]').forEach(r => r.checked = r.value === m);
+    $("suApp").hidden = m !== "app";
+    $("suRedir").textContent = REDIRECT.replace("localhost", "127.0.0.1");
+    if(document.activeElement !== $("suClientId")) $("suClientId").value = S.clientId === DEFAULT_CLIENT_ID ? "" : S.clientId;
+    $("suAppMsg").textContent = auth ? "✅ Spotify is connected. Click Next." : IS_FILE ? "⚠️ Open Focus Jams from its web address (not a file on your computer) to connect Spotify." : "";
+  }
+  if(suStep === 2){
+    if(document.activeElement !== $("suServer")) $("suServer").value = S.syncServer;
+    if(!$("suSrvMsg").textContent && S.syncServer) $("suSrvMsg").textContent = "Saved: " + S.syncServer;
+  }
+  if(suStep === 3){
+    const hasSrv = !!normHost(S.syncServer);
+    $("suArcNeeds").hidden = hasSrv; $("suArcBox").hidden = !hasSrv;
+    if(S.archiveKey) $("suArcMsg").textContent = "✅ This screen uses the shared archive (key " + S.archiveKey.replace(/(.{4})(?=.)/g, "$1-") + "). Click Next.";
+  }
+  if(suStep === 4){
+    $("suRoom").value = S.roomName;
+    document.querySelectorAll("[data-sug]").forEach(c => c.checked = !!S[c.dataset.sug]);
+  }
+  if(suStep === 5){
+    const bits = [
+      auth ? "✅ Your Spotify app is connected"
+        : (S.src === "app" || (store.get("fj-setup") || {}).music === "app") ? "⚠️ Spotify app chosen but not connected yet (go back to step 1, or The jams → My Spotify / Jam)"
+        : "✅ Using the built-in Spotify player",
+      normHost(S.syncServer) ? "✅ Your own sync server" : "Phones sync through the free public services",
+      S.archiveKey ? "✅ Shared archive on" : "Shared archive off (turn on later in 📚 Archive)",
+    ];
+    $("suSummary").innerHTML = `<b>${escH(roomName())}</b> is ready.<br>` + bits.map(escH).join("<br>");
+  }
+}
+function suGo(d){ suStep = Math.max(0, Math.min(SU_N - 1, suStep + d)); suSave(); suRender(); }
+$("suNext").onclick = () => {
+  if(suStep === 4){ S.roomName = clean($("suRoom").value, 40); save(); if(night){ night.room = roomName(); saveNight(true); } syncSoon(); renderCrew(); }
+  if(suStep === SU_N - 1){ suSave({done:true}); $("setupDlg").close(); return; }
+  suGo(1);
+};
+$("suBack").onclick = () => suGo(-1);
+$("suSkip").onclick = () => suGo(1);
+$("suClose").onclick = () => { suSave({done:true}); $("setupDlg").close(); };
+$("setupDlg").addEventListener("cancel", () => suSave({done:true}));
+$("suOpen").onclick = () => { $("look").close(); suOpen(0); };
+// 1 · music
+document.querySelectorAll('[name="suMusic"]').forEach(r => r.onchange = () => {
+  const m = document.querySelector('[name="suMusic"]:checked').value;
+  suSave({music:m}); $("suApp").hidden = m !== "app";
+  if(m === "embed" && S.src !== "embed") setSource("embed");
+});
+$("suCopyRedir").onclick = () => navigator.clipboard && navigator.clipboard.writeText($("suRedir").textContent).then(() => { $("suCopyRedir").textContent = "Copied"; setTimeout(() => $("suCopyRedir").textContent = "Copy", 1500); });
+$("suConnect").onclick = () => {
+  const id = $("suClientId").value.trim();
+  if(id && !/^[a-f0-9]{32}$/i.test(id)){ $("suAppMsg").textContent = "That Client ID doesn't look right: it's 32 letters and numbers."; return; }
+  if(!id){ $("suAppMsg").textContent = "Paste your app's Client ID first (step 4)."; return; }
+  suSave({music:"app", resume:true});
+  $("clientId").value = id; login();
+};
+// 2 · sync server
+$("suTest").onclick = async () => {
+  const h = normHost($("suServer").value); $("suServer").value = h;
+  if(!h){ $("suSrvMsg").textContent = "Paste the address first."; return; }
+  $("suSrvMsg").textContent = "Checking…";
+  try{
+    const t = await (await fetch(`${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/health`, {cache:"no-store"})).text();
+    if(!/Focus Jams/.test(t)){ $("suSrvMsg").textContent = "That address answered, but it isn't a Focus Jams sync server. Check you copied the right one."; return; }
+    if(h !== normHost(S.syncServer)){ S.syncServer = h; save(); startHost(); renderSyncBox(); }
+    $("suSrvMsg").textContent = "✅ Your sync server works and is saved. Phones need to scan the QR code again. Click Next.";
+  }catch(e){ $("suSrvMsg").textContent = "❌ Couldn't reach it. Check the address (it ends in .workers.dev). A brand-new server can take a minute or two to start."; }
+};
+$("suServer").onkeydown = e => { if(e.key === "Enter") $("suTest").click(); };
+// 3 · shared archive (same as 📚 Archive → Shared archive)
+const suArcWatch = () => { const t = $("arcMsg").textContent; if(t) $("suArcMsg").textContent = t; };
+$("suArcCreate").onclick = async () => { $("suArcMsg").textContent = "Creating…"; $("arcCreate").click(); setTimeout(suArcWatch, 1500); setTimeout(suArcWatch, 4000); };
+$("suArcJoin").onclick = async () => { $("arcKeyIn").value = $("suArcKey").value; $("suArcMsg").textContent = "Joining…"; $("arcJoin").click(); setTimeout(suArcWatch, 1500); setTimeout(suArcWatch, 4000); };
+$("suArcKey").onkeydown = e => { if(e.key === "Enter") $("suArcJoin").click(); };
+// 4 · room
+document.querySelectorAll("[data-sug]").forEach(c => c.onchange = () => { S[c.dataset.sug] = c.checked; save(); renderCrew(); syncSoon(); });
+// first visit: show the guide (people who already used Focus Jams before the guide existed don't get it automatically)
+function suMaybeStart(){
+  if(SYNC) return;
+  const st = store.get("fj-setup");
+  if(st && st.resume){ suSave({resume:false}); suOpen(st.step || 1); return; }   // back from Spotify sign-in
+  if(st && st.done) return;
+  if(!st && (SAVED_BEFORE || store.get("fj-hist"))){ suSave({done:true}); return; }
+  suOpen(st ? st.step : 0);
+}
+
 /* ================= start up ================= */
 (async function init(){
   window.FJ_READY = true;
@@ -4296,6 +4504,7 @@ document.addEventListener("keydown", e => {
   if(resume) start();   // it was running before the reload: keep going
   await handleRedirect();
   setSource(S.src);
+  suMaybeStart();
 })();
 </script>
 </body>
