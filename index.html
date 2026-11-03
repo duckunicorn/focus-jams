@@ -167,6 +167,8 @@
   .steps{padding-left:20px;margin:0 0 14px;font-size:14px;line-height:1.55}
   .steps li{margin-bottom:8px}
   .copyrow{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .steps ul{padding-left:18px;margin:4px 0 6px;list-style:disc} .steps ul li{margin-bottom:3px}
+  .copyrow code{word-break:break-all;min-width:0}
   code{font-family:"JetBrains Mono",monospace;font-size:12px;background:var(--panel2);border:1px solid var(--line);padding:6px 8px;border-radius:8px;word-break:break-all;flex:1}
   .note{background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.55;margin-bottom:14px}
   .note code{display:inline-block;margin:2px 0}
@@ -499,20 +501,28 @@
             Spotify doesn't accept <b>localhost</b> addresses. Open this page at <code id="loopUrl"></code> instead.
           </div>
           <p class="sub">Sign in to show what's playing in your Spotify app (Jams included) and let the timer control it.</p>
+          <p class="sub" style="margin-top:6px"><b>Set up your own free Spotify app first (about 5 minutes, once).</b> Spotify only lets a few approved accounts use each app, so every group should make its own. You need Spotify Premium.</p>
           <ol class="steps">
-            <li>In your app on <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>, open <b>Settings → Edit</b> and add this <b>Redirect URI</b> (once per web address you use):
-              <div class="copyrow"><code id="redir"></code><button class="ghost sm" id="copyRedir">Copy</button></div></li>
-            <li>Click <b>Connect</b> and sign in.</li>
+            <li>Go to <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> and log in with your Spotify account. The first time, accept the developer terms (Spotify may ask you to confirm your email first).</li>
+            <li>Click <b>Create app</b> and fill in:
+              <ul>
+                <li><b>App name:</b> Focus Jams (anything works)</li>
+                <li><b>App description:</b> Pomodoro timer for my group</li>
+                <li><b>Redirect URI:</b> paste this, then click <b>Add</b>:
+                  <div class="copyrow"><code id="redir"></code><button class="ghost sm" id="copyRedir">Copy</button></div></li>
+                <li><b>Which API/SDKs:</b> tick <b>Web API</b></li>
+              </ul>
+              Agree to the terms and click <b>Save</b>.</li>
+            <li>On your new app's page, copy the <b>Client ID</b> (a 32-character code under Basic Information) and paste it here:
+              <div class="row" style="margin-top:8px">
+                <input type="text" id="clientId" placeholder="Paste your Client ID" autocomplete="off" spellcheck="false">
+              </div></li>
+            <li>Click <b>Connect Spotify</b> and approve.</li>
           </ol>
           <div class="row">
             <button class="big sm" id="connect">Connect Spotify</button>
           </div>
-          <details class="adv"><summary>Use a different Client ID</summary>
-            <div class="row" style="margin-top:10px">
-              <input type="text" id="clientId" placeholder="Client ID" autocomplete="off" spellcheck="false">
-            </div>
-          </details>
-          <p class="hint">Spotify requires the app owner to have Premium. Friends can sign in too if you add them under <b>User Management</b> in the dashboard (up to 5).</p>
+          <p class="hint">Your own account works right away. To let up to 5 other people sign in with their Spotify accounts, add their name and Spotify email in your app under <b>Settings → User Management</b>. Only the computer running the big screen needs to sign in. Everyone else just scans the QR codes. Already have an app? Make sure its Redirect URIs include the address above. If you leave the box empty, Focus Jams uses the shared app, which only works for accounts its owner has added.</p>
         </div>
 
         <div id="np" hidden>
