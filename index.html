@@ -341,6 +341,9 @@
   .recap-btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:2vh}
   .hist-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;background:var(--panel2);border-radius:12px;padding:8px 12px;margin-top:6px;font-size:13px}
   .hist-row b{font-size:14px}
+  .hroom{cursor:pointer;border-radius:4px;padding:0 2px} .hroom:hover{background:rgba(255,255,255,.08)}
+  .hroom .hpen{font-size:11px;opacity:.4} .hroom:hover .hpen{opacity:1}
+  .hroom-in{font:inherit;font-size:13px;padding:2px 6px;border-radius:6px;width:min(220px,60%)}
   .ptable{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
   .ptable th{text-align:left;color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;padding:4px 6px}
   .ptable td{padding:6px;border-top:1px solid var(--line)}
@@ -3522,7 +3525,7 @@ function renderGroupUI(){
     : night ? `Started ${new Date(night.start).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})} · ${Object.keys(people).length} people · ${minsTxt(night.focusMs)} focused · ${night.photos} photos`
     : "A night starts when the first focus session starts or someone joins.";
   const h = getHist();
-  $("histNights").innerHTML = h.nights.length ? h.nights.slice(0, 50).map(r => `<div class="hist-row"><div><b>${new Date(r.start).toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"})}</b> · ${escH(r.room)}<br>
+  $("histNights").innerHTML = h.nights.length ? h.nights.slice(0, 50).map(r => `<div class="hist-row"><div><b>${new Date(r.start).toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"})}</b> · <span class="hroom" data-room="${r.id}" title="Click to rename">${escH(r.room)} <span class="hpen">✏️</span></span><br>
       ${minsTxt(r.focusMs)} focused · ${r.sessions} sessions · ${r.people.length} people · ${r.goalsDone} goals${r.photos ? ` · 📸 ${r.photos}` : ""}</div>
       <div class="testrow" style="margin:0"><button class="ghost sm" data-recap="${r.id}">View</button>${r.photos ? `<button class="ghost sm" data-browse="${r.id}">🖼 Photos</button><button class="ghost sm" data-album="${r.id}">⬇ .zip</button><button class="ghost sm" data-addzip="${r.id}" hidden title="This night's ${r.photos} photos aren't saved anywhere: add them back from a .zip">⬆ Add photos (.zip)</button>` : ""}<button class="ghost sm" data-del="${r.id}" title="Delete this night">🗑</button></div></div>`).join("")
     : `<p class="hint" style="margin:0">Finished nights show up here.</p>`;
@@ -3603,9 +3606,32 @@ $("histNights").onclick = e => {
   const br = e.target.closest("[data-browse]"), dl = e.target.closest("[data-del]");
   if(br && find(br.dataset.browse)){ $("arcDlg").close(); albumOpen("projector", br.dataset.browse); }
   if(dl && find(dl.dataset.del)) deleteNight(dl.dataset.del);
+  const rn = e.target.closest("[data-room]");
+  if(rn && find(rn.dataset.room)) editRoomName(rn);
   const az = e.target.closest("[data-addzip]");
   if(az && find(az.dataset.addzip)){ addZipNight = az.dataset.addzip; $("histZipIn").value = ""; $("histZipIn").click(); }
 };
+// rename a past night's room: click the name, type, Enter (Esc cancels). Syncs to the shared archive.
+function editRoomName(el){
+  const id = el.dataset.room, r = getHist().nights.find(x => x.id === id); if(!r) return;
+  const inp = Object.assign(document.createElement("input"), {type:"text", value:r.room || "", maxLength:40, className:"hroom-in", placeholder:"Room name"});
+  el.replaceWith(inp); inp.focus(); inp.select();
+  let done = false;
+  const finish = keep => {
+    if(done) return; done = true;
+    const v = clean(inp.value, 40);
+    if(keep && v && v !== r.room){
+      const h = getHist(), n = h.nights.find(x => x.id === id);
+      if(n){ n.room = v; n.edited = Date.now(); store.set("fj-hist", h); }
+      delete collageCache[id]; archSoon(500);
+      if(lastRecap && lastRecap.id === id) lastRecap.room = v;
+    }
+    renderGroupUI();
+  };
+  inp.onkeydown = e => { if(e.key === "Enter"){ e.preventDefault(); finish(true); } else if(e.key === "Escape"){ e.preventDefault(); e.stopPropagation(); finish(false); } };
+  inp.onblur = () => finish(true);
+  inp.onclick = e => e.stopPropagation();
+}
 /* ----- add photos to a past night from a .zip (or picked image files) ----- */
 var addZipNight = null;
 // minimal .zip reader: stored and deflated files (what Mac, Windows and phones make)
