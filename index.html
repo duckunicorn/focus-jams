@@ -411,6 +411,12 @@
   .album-msg{padding:0 16px 20px;color:rgba(255,255,255,.7)}
   .album-view{position:fixed;inset:0;z-index:2;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px}
   .album-view[hidden]{display:none}
+  .parc-night{background:rgba(255,255,255,.06);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:13px;color:rgba(255,255,255,.75);line-height:1.5}
+  .parc-night b{color:#fff;font-size:14px} .parc-night .testrow{margin:6px 0 0}
+  .parc-night.mine{outline:1px solid var(--accent)}
+  #parc .ptable{color:#fff} #parc .ptable td{border-color:rgba(255,255,255,.12)} #parc .ptable tr.me td{color:var(--accent)}
+  #parc .album-grid{padding:6px 0 20px}
+  #parc{background:#0b0b0d}
   .album-view img{max-width:100%;max-height:calc(100% - 120px);object-fit:contain;border-radius:8px}
   .album-cap{color:rgba(255,255,255,.75);font-size:14px}
 
@@ -613,6 +619,18 @@
   </div>
 </div>
 
+<div class="album" id="parc" hidden>
+  <div class="album-h"><b>📚 Archive</b><span class="cnt" id="parcCnt"></span><button class="big sm" id="parcClose">Close</button>
+    <div class="seg" id="parcTabs" style="width:100%"><button data-pt="nights" class="on">Nights</button><button data-pt="people">People</button></div></div>
+  <div id="parcBody" style="padding:4px 12px 30px"></div>
+  <div class="album-view" id="parcView" hidden>
+    <img id="parcImg" alt="">
+    <div class="album-cap" id="parcCap"></div>
+    <div class="testrow"><a class="big sm btnlink" id="parcOpen" target="_blank" rel="noopener" style="color:var(--accent-ink)">Open full size</a><button class="ghost sm" id="parcBack">← Back</button></div>
+    <div class="hint" style="color:rgba(255,255,255,.6)">To save: open it full size, then press and hold the photo.</div>
+  </div>
+</div>
+
 <!-- FACE DOWN -->
 <div class="phdown" id="phDown" hidden><b>🙃</b>Phone down. Nice.<span style="font-size:12px">Pick it up to see the timer</span></div>
 
@@ -716,6 +734,7 @@
   </div>
   <div class="card" id="phRecap" hidden></div>
   <details class="card" id="phHistBox" hidden><summary>📈 My history</summary><div class="ph-hist" id="phHist"></div></details>
+  <button class="ghost" id="phArcBtn" hidden style="width:100%;margin-top:4px">📚 Archive: past nights, stats &amp; photos</button>
   <div class="card" id="phHelp" hidden>
     <b>Can't reach the big screen?</b>
     <ul class="hint" style="margin:8px 0 0;padding-left:18px;line-height:1.6">
@@ -3410,7 +3429,8 @@ function groupState(){
     m:Math.floor(p.focusMs/60000), s:p.sessions, gd:p.goalsDone}));
   return {f:{goals:S.gGoals, jail:S.gJail, stats:S.gStats, photos:S.gPhotos}, grace:S.jailGrace, room:roomName(),
     night: night ? {id:night.id, m:Math.floor(night.focusMs/60000), s:night.sessions, gd:night.goalsDone, p:night.photos} : null,
-    ppl, recap: lastRecap};
+    ppl, recap: lastRecap,
+    av: arcView && arcView.key === S.archiveKey && S.archiveKey ? arcView.token : undefined};   // read-only archive for phones
 }
 // the relay only carries small messages, so trim the crew list (and recap) to fit
 function relayBody(){
@@ -3836,7 +3856,7 @@ $("histClear").onclick = async () => {
   store.set("fj-hist", null); collageCache = {}; renderGroupUI();
 };
 /* ----- shared archive: all screens with the same key share history and photos (stored on your sync server) ----- */
-var arcBusy = false, arcT = null, arcStat = store.get("fj-arc-stat") || null, arcCounts = null;
+var arcBusy = false, arcT = null, arcStat = store.get("fj-arc-stat") || null, arcCounts = null, arcView = store.get("fj-arc-view") || null;
 const arcBase = () => {
   const h = normHost(S.syncServer);
   return S.archiveKey && h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/archive/${S.archiveKey}` : null;
@@ -3902,6 +3922,9 @@ async function archSync(){
       }catch(e){ failP++; if(/full/.test(e.message)){ arcSay("⚠️ The shared archive is full."); break; } }
     }
     arcCounts = srv.counts || {};
+    if(!arcView || arcView.key !== S.archiveKey){
+      try{ const v = await archJson("GET", "/viewtoken"); if(v && v.token){ arcView = {key:S.archiveKey, token:v.token}; store.set("fj-arc-view", arcView); syncSoon(); } }catch(e){}
+    }
     const st = srv.stats || {};
     arcStat = {at:Date.now(), nights:Math.max(st.nights || 0, h.nights.length), photos:(st.photos || 0) + sentP, mb:Math.round(((st.bytes || 0) / 1e6))};
     store.set("fj-arc-stat", arcStat);
@@ -4031,6 +4054,8 @@ function phGroupRender(g){
     : `📵 Phone jail is on: during focus, leaving this page for more than ${g.grace}s puts your name on the big screen. Don't lock your phone; put it face down instead (it stays awake).` + (mine && mine.v ? ` (Visits tonight: ${mine.v})` : "");
   phWake(g.f.jail);
   phDownSetup(g.f.jail);
+  // read-only archive (when the projector shares one and uses its own sync server)
+  $("phArcBtn").hidden = !parcBase();
   // photos
   $("phPhotoBox").hidden = !g.f.photos;
   const pc = (g.night && g.night.p) || (g.recap && g.recap.photos) || 0;
@@ -4175,6 +4200,72 @@ if(SYNC){
   addEventListener("pagehide", () => { if(me.name) phSend({t:"bye"}, false); });
   // keep relay-only phones counted as "here"
   setInterval(() => { if(me.name && phG && !(phConn && phConn.open)) phSend({t:"ping"}); }, 120000);
+}
+
+
+/* ----- phones: read-only archive (straight from the sync server, through a view-only link) ----- */
+var parcData = null, parcTab = "nights", parcNight = null, parcLoadedAt = 0;
+const parcBase = () => PHSRV && phG && phG.av ? `${/^(localhost|127\.)/.test(PHSRV) ? "http" : "https"}://${PHSRV}/view/${phG.av}` : null;
+function parcOpenUI(){
+  $("parc").hidden = false; $("parcView").hidden = true; parcNight = null;
+  if(!parcData || Date.now() - parcLoadedAt > 60000) parcLoad(); else parcRender();
+}
+async function parcLoad(){
+  const base = parcBase(); if(!base) return;
+  $("parcBody").innerHTML = `<p class="album-msg">Loading…</p>`;
+  try{
+    const r = await fetch(base + "/nights", {cache:"no-store"}); if(!r.ok) throw 0;
+    const d = await r.json();
+    const h = {nights:(d.nights || []).sort((a,b) => b.start - a.start), people:{}};
+    rebuildPeople(h);
+    parcData = Object.assign(h, {counts:d.counts || {}}); parcLoadedAt = Date.now();
+    parcRender();
+  }catch(e){ $("parcBody").innerHTML = `<p class="album-msg">Couldn't load the archive. Check your connection and try again.</p>`; }
+}
+function parcRender(){
+  if(!parcData) return;
+  document.querySelectorAll("#parcTabs button").forEach(b => b.classList.toggle("on", b.dataset.pt === parcTab));
+  $("parcTabs").hidden = !!parcNight;
+  const h = parcData;
+  if(parcNight){ parcPhotos(parcNight); return; }
+  $("parcCnt").textContent = `${h.nights.length} night${h.nights.length === 1 ? "" : "s"}`;
+  if(parcTab === "people"){
+    const ppl = Object.entries(h.people).sort((a,b) => (b[1].focusMs || 0) - (a[1].focusMs || 0));
+    $("parcBody").innerHTML = ppl.length ? `<table class="ptable"><tr><th>Name</th><th>Nights</th><th>Focus</th><th>Goals</th><th>📵</th></tr>` +
+      ppl.map(([id, a]) => `<tr class="${id === me.id ? "me" : ""}"><td>${a.emoji} ${escH(a.name)}</td><td>${a.nights}</td><td>${minsTxt(a.focusMs)}</td><td>${a.goalsDone}</td><td>${a.jailVisits}</td></tr>`).join("") + `</table>`
+      : `<p class="album-msg">No finished nights yet.</p>`;
+    return;
+  }
+  $("parcBody").innerHTML = h.nights.length ? h.nights.slice(0, 200).map(r => {
+    const mine = (r.people || []).find(p => p.id === me.id), n = h.counts[r.id] || 0;
+    return `<div class="parc-night${mine ? " mine" : ""}"><b>${new Date(r.start).toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"})}</b> · ${escH(r.room || "")}<br>
+      ${minsTxt(r.focusMs)} focused · ${r.sessions} sessions · ${(r.people || []).length} people · ${r.goalsDone} goals
+      ${mine ? `<br>You: ${minsTxt(mine.focusMs)} focused, ${mine.sessions} sessions, ${mine.goalsDone} goals` : ""}
+      ${n ? `<div class="testrow"><button class="ghost sm" data-pn="${r.id}">🖼 ${n} photo${n === 1 ? "" : "s"}</button></div>` : ""}</div>`;
+  }).join("") : `<p class="album-msg">No finished nights yet. They show up here after each night ends.</p>`;
+}
+async function parcPhotos(id){
+  const r = parcData.nights.find(x => x.id === id);
+  $("parcCnt").textContent = r ? `${new Date(r.start).toLocaleDateString(undefined, {month:"short", day:"numeric"})} · ${r.room || ""}` : "";
+  $("parcBody").innerHTML = `<div class="testrow" style="margin:6px 0"><button class="ghost sm" id="parcNights">← All nights</button></div><div class="album-grid" id="parcGrid"></div><p class="album-msg" id="parcMsg">Loading photos…</p>`;
+  $("parcNights").onclick = () => { parcNight = null; parcRender(); };
+  try{
+    const list = await (await fetch(parcBase() + "/photos?night=" + encodeURIComponent(id))).json();
+    if(parcNight !== id) return;
+    $("parcMsg").textContent = list.length ? "" : "No photos for this night.";
+    $("parcGrid").innerHTML = list.map(ph => `<button data-pp="${ph.id}" data-cap="${escH((ph.emoji || "") + " " + (ph.name || ""))}"><img loading="lazy" src="${ph.thumb || (parcBase() + "/photo/" + ph.id)}" alt=""><span>${escH((ph.emoji || "") + " " + (ph.name || ""))}</span></button>`).join("");
+  }catch(e){ $("parcMsg").textContent = "Couldn't load the photos."; }
+}
+if(SYNC){
+  $("phArcBtn").onclick = parcOpenUI;
+  $("parcClose").onclick = () => { $("parc").hidden = true; };
+  $("parcTabs").onclick = e => { const b = e.target.closest("[data-pt]"); if(b){ parcTab = b.dataset.pt; parcRender(); } };
+  $("parcBody").onclick = e => {
+    const n = e.target.closest("[data-pn]"); if(n){ parcNight = n.dataset.pn; parcRender(); return; }
+    const p = e.target.closest("[data-pp]");
+    if(p){ const u = parcBase() + "/photo/" + p.dataset.pp; $("parcImg").src = u; $("parcOpen").href = u; $("parcCap").textContent = p.dataset.cap; $("parcView").hidden = false; }
+  };
+  $("parcBack").onclick = () => { $("parcView").hidden = true; $("parcImg").removeAttribute("src"); };
 }
 
 /* ----- face-down mode (phones) ----- */

@@ -38,6 +38,18 @@ export default {
       const box = env.ARCHIVES.get(env.ARCHIVES.idFromName(ar[1].toLowerCase()));
       return box.fetch(req);
     }
+    // read-only view of an archive (for phones): /view/<token>/nights | /photos?night= | /photo/<id>
+    const vw = url.pathname.match(/^\/view\/([a-f0-9]{32})(\/.*)?$/);
+    if (vw) {
+      if (req.method !== "GET") return new Response("Read-only", { status: 405, headers: CORS });
+      const rest = vw[2] || "/";
+      if (!/^\/(nights|photos|photo\/[\w-]+)?$/.test(rest)) return new Response("Not found", { status: 404, headers: CORS });
+      const map = env.ARCHIVES.get(env.ARCHIVES.idFromName("view:" + vw[1]));
+      const t = await (await map.fetch(new Request(url.origin + "/__target"))).json().catch(() => ({}));
+      if (!t.key) return json({ error: "not found" }, 404);
+      const box = env.ARCHIVES.get(env.ARCHIVES.idFromName(t.key));
+      return box.fetch(new Request(url.origin + "/archive/" + t.key + rest + url.search, { method: "GET" }));
+    }
     const m = url.pathname.match(/^\/room\/([a-z0-9]{6,16})$/i);
     if (!m) return new Response("Not found", { status: 404, headers: CORS });
     if (req.headers.get("Upgrade") !== "websocket") return new Response("Expected a WebSocket", { status: 426, headers: CORS });
@@ -228,6 +240,18 @@ export class Archive extends DurableObject {
         this.sql.exec("INSERT OR REPLACE INTO deleted (id, at) VALUES (?, ?)", id, now);
         return json({ ok: true });
       }
+      // read-only link for phones: a token that can't be turned back into the key
+      if (req.method === "GET" && path === "/viewtoken") {
+        const key = url.pathname.split("/")[2].toLowerCase();
+        const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("focus-jams-view:" + key)));
+        const token = [...h.slice(0, 16)].map(b => b.toString(16).padStart(2, "0")).join("");
+        const map = this.env.ARCHIVES.get(this.env.ARCHIVES.idFromName("view:" + token));
+        await map.fetch(new Request(url.origin + "/__settarget?key=" + encodeURIComponent(key), { method: "PUT" }));
+        return json({ token });
+      }
+      // (only reachable from inside the worker: outside requests to /archive/... always have a key in front)
+      if (path === "/__target") return json({ key: (await this.ctx.storage.get("target")) || null });
+      if (path === "/__settarget" && req.method === "PUT") { await this.ctx.storage.put("target", url.searchParams.get("key")); return json({ ok: true }); }
       if (req.method === "GET" && path === "/") return json({ ok: true, stats: this.stats() });
       return json({ error: "not found" }, 404);
     } catch (e) {
