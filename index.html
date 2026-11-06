@@ -428,6 +428,12 @@
   #parc .ptable{color:#fff} #parc .ptable td{border-color:rgba(255,255,255,.12)} #parc .ptable tr.me td{color:var(--accent)}
   #parc .album-grid{padding:6px 0 20px}
   #parc{background:#0b0b0d}
+  #parc .album-grid button .pchk{display:none;position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;font-style:normal;font-size:14px;line-height:22px;text-align:center;border:2px solid #fff;background:rgba(0,0,0,.35);color:transparent}
+  #parc .album-grid.selecting button .pchk{display:block}
+  #parc .album-grid.selecting button.sel{outline:3px solid var(--accent);outline-offset:-3px}
+  #parc .album-grid.selecting button.sel .pchk{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  #parc .album-grid.selecting button.sel img{opacity:.8}
+  .parc-tools{flex-wrap:wrap;gap:6px}
   #parc .album-h .cnt{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #parc .album-h{gap:8px} #parc .album-h > button{flex:none}
   .album-view img{max-width:100%;max-height:calc(100% - 120px);object-fit:contain;border-radius:8px}
@@ -639,8 +645,8 @@
   <div class="album-view" id="parcView" hidden>
     <img id="parcImg" alt="">
     <div class="album-cap" id="parcCap"></div>
-    <div class="testrow"><a class="big sm btnlink" id="parcOpen" target="_blank" rel="noopener" style="color:var(--accent-ink)">Open full size</a><button class="ghost sm" id="parcBack">← Back</button></div>
-    <div class="hint" style="color:rgba(255,255,255,.6)">To save: open it full size, then press and hold the photo.</div>
+    <div class="testrow"><button class="big sm" id="parcSaveOne">⬇ Save photo</button><a class="ghost sm btnlink" id="parcOpen" target="_blank" rel="noopener">Open full size</a><button class="ghost sm" id="parcBack">← Back</button></div>
+    <div class="hint" id="parcSaveMsg" style="color:rgba(255,255,255,.6)"></div>
   </div>
 </div>
 
@@ -4384,14 +4390,73 @@ function parcRender(){
 async function parcPhotos(id){
   const r = parcData.nights.find(x => x.id === id);
   $("parcCnt").textContent = r ? `${new Date(r.start).toLocaleDateString(undefined, {month:"short", day:"numeric"})} · ${r.room || ""}` : "";
-  $("parcBody").innerHTML = `<div class="testrow" style="margin:6px 0"><button class="ghost sm" id="parcNights">← All nights</button></div><div class="album-grid" id="parcGrid"></div><p class="album-msg" id="parcMsg">Loading photos…</p>`;
-  $("parcNights").onclick = () => { parcNight = null; parcRender(); };
+  parcSel = null;
+  $("parcBody").innerHTML = `<div class="testrow parc-tools" style="margin:6px 0"><button class="ghost sm" id="parcNights">← All nights</button><span style="flex:1"></span>
+      <button class="ghost sm" id="parcSelBtn" hidden>☑️ Select</button><button class="ghost sm" id="parcAllBtn" hidden>Select all</button><button class="big sm" id="parcSaveSel" hidden></button></div>
+    <p class="hint" id="parcSelMsg" style="margin:0 0 6px;color:rgba(255,255,255,.65)"></p>
+    <div class="album-grid" id="parcGrid"></div><p class="album-msg" id="parcMsg">Loading photos…</p>`;
+  $("parcNights").onclick = () => { parcNight = null; parcSel = null; parcRender(); };
+  $("parcSelBtn").onclick = () => { parcSel = parcSel ? null : new Set(); parcSelRender(); };
+  $("parcAllBtn").onclick = () => {
+    const all = [...document.querySelectorAll("#parcGrid [data-pp]")].map(b => b.dataset.pp);
+    parcSel = parcSel && parcSel.size === all.length ? new Set() : new Set(all); parcSelRender();
+  };
+  $("parcSaveSel").onclick = () => { if(parcSel && parcSel.size) parcSave([...parcSel], $("parcSaveSel"), $("parcSelMsg")); };
   try{
     const list = await (await fetch(parcBase() + "/photos?night=" + encodeURIComponent(id))).json();
     if(parcNight !== id) return;
     $("parcMsg").textContent = list.length ? "" : "No photos for this night.";
-    $("parcGrid").innerHTML = list.map(ph => `<button data-pp="${ph.id}" data-cap="${escH((ph.emoji || "") + " " + (ph.name || ""))}"><img loading="lazy" src="${ph.thumb || (parcBase() + "/photo/" + ph.id)}" alt=""><span>${escH((ph.emoji || "") + " " + (ph.name || ""))}</span></button>`).join("");
+    $("parcGrid").innerHTML = list.map((ph, i) => `<button data-pp="${ph.id}" data-i="${i + 1}" data-nm="${escH(ph.name || "")}" data-cap="${escH((ph.emoji || "") + " " + (ph.name || ""))}"><img loading="lazy" src="${ph.thumb || (parcBase() + "/photo/" + ph.id)}" alt=""><span>${escH((ph.emoji || "") + " " + (ph.name || ""))}</span><i class="pchk">✓</i></button>`).join("");
+    $("parcSelBtn").hidden = !list.length;
+    parcSelRender();
   }catch(e){ $("parcMsg").textContent = "Couldn't load the photos."; }
+}
+/* ----- choosing photos and saving them ----- */
+var parcSel = null;   // null = not selecting; a Set of photo ids while selecting
+function parcSelRender(){
+  const on = !!parcSel, n = on ? parcSel.size : 0, total = document.querySelectorAll("#parcGrid [data-pp]").length;
+  $("parcGrid").classList.toggle("selecting", on);
+  document.querySelectorAll("#parcGrid [data-pp]").forEach(b => b.classList.toggle("sel", on && parcSel.has(b.dataset.pp)));
+  $("parcSelBtn").textContent = on ? "Cancel" : "☑️ Select";
+  $("parcAllBtn").hidden = !on; $("parcAllBtn").textContent = on && n === total && total ? "Select none" : "Select all";
+  $("parcSaveSel").hidden = !on || !n; $("parcSaveSel").textContent = `⬇ Save ${n} photo${n === 1 ? "" : "s"}`; $("parcSaveSel").dataset.ready = "";
+  $("parcSelMsg").textContent = on ? (n ? `${n} selected` : "Tap photos to select them.") : "";
+}
+const parcCanShareFiles = () => { try{ return !!(navigator.canShare && matchMedia("(pointer:coarse)").matches && navigator.canShare({files:[new File([""], "a.jpg", {type:"image/jpeg"})]})); }catch(e){ return false; } };
+const parcFileName = (b, i) => `${String(b ? b.dataset.i : i).padStart(3, "0")}${b && b.dataset.nm ? " - " + b.dataset.nm.replace(/[\\/:*?"<>|]/g, "") : ""}.jpg`;
+// Phones: get the photos, then a second tap opens the share sheet ("Save to Photos"). Computers: download (several = one .zip).
+async function parcSave(ids, btn, msgEl){
+  const say = t => { if(msgEl) msgEl.textContent = t; };
+  if(btn.dataset.ready === "1" && btn._files){   // second tap on phones: share sheet (needs a fresh tap)
+    try{ await navigator.share({files:btn._files}); say("Saved, or shared. ✅"); }
+    catch(e){ if(!(e && e.name === "AbortError")){ say("The share sheet didn't open, so here's a download instead."); parcDownloadFiles(btn._files); } }
+    btn.dataset.ready = ""; btn._files = null; btn.textContent = btn._label; return;
+  }
+  btn._label = btn.textContent; btn.disabled = true;
+  const files = [];
+  try{
+    for(let i = 0; i < ids.length; i++){
+      say(`Getting photo ${i + 1} of ${ids.length}…`);
+      const blob = await (await fetch(parcBase() + "/photo/" + encodeURIComponent(ids[i]))).blob();
+      const el = document.querySelector(`#parcGrid [data-pp="${CSS.escape(ids[i])}"]`);
+      files.push(new File([blob], parcFileName(el, i + 1), {type:"image/jpeg"}));
+    }
+  }catch(e){ say("Couldn't get the photos. Check your connection and try again."); btn.disabled = false; return; }
+  btn.disabled = false;
+  if(parcCanShareFiles() && files.length <= 40 && navigator.canShare({files})){
+    btn._files = files; btn.dataset.ready = "1";
+    btn.textContent = files.length === 1 ? "📲 Tap to save" : `📲 Tap to save ${files.length} photos`;
+    say("Ready. Tap again, then choose “Save Image” (iPhone) or where to save it.");
+    return;
+  }
+  parcDownloadFiles(files); btn.textContent = btn._label;
+  say(files.length === 1 ? "Downloaded. ✅" : `Downloaded ${files.length} photos as a .zip. ✅`);
+}
+async function parcDownloadFiles(files){
+  if(files.length === 1){ downloadBlob(files[0], files[0].name); return; }
+  const r = parcData && parcData.nights.find(x => x.id === parcNight);
+  const parts = await Promise.all(files.map(async f => ({name:f.name, data:new Uint8Array(await f.arrayBuffer())})));
+  downloadBlob(makeZip(parts), `Focus Jams photos${r ? " " + fileDate(r) : ""}.zip`);
 }
 if(SYNC || ARCV){
   $("phArcBtn").onclick = parcOpenUI;
@@ -4401,8 +4466,12 @@ if(SYNC || ARCV){
   $("parcBody").onclick = e => {
     const n = e.target.closest("[data-pn]"); if(n){ parcNight = n.dataset.pn; parcRender(); return; }
     const p = e.target.closest("[data-pp]");
-    if(p){ const u = parcBase() + "/photo/" + p.dataset.pp; $("parcImg").src = u; $("parcOpen").href = u; $("parcCap").textContent = p.dataset.cap; $("parcView").hidden = false; }
+    if(p && parcSel){ parcSel.has(p.dataset.pp) ? parcSel.delete(p.dataset.pp) : parcSel.add(p.dataset.pp); parcSelRender(); return; }
+    if(p){ const u = parcBase() + "/photo/" + p.dataset.pp; $("parcImg").src = u; $("parcOpen").href = u; $("parcCap").textContent = p.dataset.cap;
+      $("parcSaveOne").dataset.pp = p.dataset.pp; $("parcSaveOne").dataset.ready = ""; $("parcSaveOne").textContent = "⬇ Save photo"; $("parcSaveMsg").textContent = "";
+      $("parcView").hidden = false; }
   };
+  $("parcSaveOne").onclick = () => parcSave([$("parcSaveOne").dataset.pp], $("parcSaveOne"), $("parcSaveMsg"));
   $("parcBack").onclick = () => { $("parcView").hidden = true; $("parcImg").removeAttribute("src"); };
 }
 
