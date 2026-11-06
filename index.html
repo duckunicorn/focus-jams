@@ -4446,7 +4446,11 @@ function parcSelRender(){
   $("parcSaveSel").hidden = !on || !n; $("parcSaveSel").textContent = `⬇ Save ${n} photo${n === 1 ? "" : "s"}`; $("parcSaveSel").dataset.ready = "";
   $("parcSelMsg").textContent = on ? (n ? `${n} selected` : "Tap photos to select them.") : "";
 }
-const parcCanShareFiles = () => { try{ return !!(navigator.canShare && matchMedia("(pointer:coarse)").matches && navigator.canShare({files:[new File([""], "a.jpg", {type:"image/jpeg"})]})); }catch(e){ return false; } };
+// iPhone/iPad: only the share sheet's "Save Image" puts photos in Photos (downloads go to the Files app).
+// Android: plain downloads show up in Google Photos / Gallery by themselves, so no share sheet there.
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+const parcCanShareFiles = () => { try{ return !!(IS_IOS && navigator.canShare && navigator.canShare({files:[new File([""], "a.jpg", {type:"image/jpeg"})]})); }catch(e){ return false; } };
 const parcFileName = (b, i) => `${String(b ? b.dataset.i : i).padStart(3, "0")}${b && b.dataset.nm ? " - " + b.dataset.nm.replace(/[\\/:*?"<>|]/g, "") : ""}.jpg`;
 // Phones: get the photos, then a second tap opens the share sheet ("Save to Photos"). Computers: download (several = one .zip).
 async function parcSave(ids, btn, msgEl){
@@ -4469,8 +4473,14 @@ async function parcSave(ids, btn, msgEl){
   btn.disabled = false;
   if(parcCanShareFiles() && files.length <= 40 && navigator.canShare({files})){
     btn._files = files; btn.dataset.ready = "1";
-    btn.textContent = files.length === 1 ? "📲 Tap to save" : `📲 Tap to save ${files.length} photos`;
-    say("Ready. Tap again, then choose “Save Image” (iPhone) or where to save it.");
+    btn.textContent = files.length === 1 ? "📲 Tap to save to Photos" : `📲 Tap to save ${files.length} to Photos`;
+    say(`Ready. Tap again, then tap “${files.length === 1 ? "Save Image" : `Save ${files.length} Images`}” to put ${files.length === 1 ? "it" : "them"} in your Photos.`);
+    return;
+  }
+  if(IS_ANDROID){   // one file each, so they show up in the gallery (a .zip wouldn't)
+    for(let i = 0; i < files.length; i++){ downloadBlob(files[i], files[i].name); if(i < files.length - 1) await new Promise(r => setTimeout(r, 350)); }
+    btn.textContent = btn._label;
+    say(`Saved ${files.length === 1 ? "it" : `${files.length} photos`} to your phone ✅ They're in your gallery (Download folder).` + (files.length > 1 ? " If Chrome asks about downloading several files, tap Allow." : ""));
     return;
   }
   parcDownloadFiles(files); btn.textContent = btn._label;
