@@ -428,6 +428,8 @@
   #parc .ptable{color:#fff} #parc .ptable td{border-color:rgba(255,255,255,.12)} #parc .ptable tr.me td{color:var(--accent)}
   #parc .album-grid{padding:6px 0 20px}
   #parc{background:#0b0b0d}
+  #parc .album-h .cnt{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #parc .album-h{gap:8px} #parc .album-h > button{flex:none}
   .album-view img{max-width:100%;max-height:calc(100% - 120px);object-fit:contain;border-radius:8px}
   .album-cap{color:rgba(255,255,255,.75);font-size:14px}
 
@@ -631,7 +633,7 @@
 </div>
 
 <div class="album" id="parc" hidden>
-  <div class="album-h"><b>📚 Archive</b><span class="cnt" id="parcCnt"></span><button class="big sm" id="parcClose">Close</button>
+  <div class="album-h"><b>📚 Archive</b><span class="cnt" id="parcCnt"></span><button class="ghost sm" id="parcShare" title="Share a view-only link to this archive">🔗 Share</button><button class="big sm" id="parcClose">Close</button>
     <div class="seg" id="parcTabs" style="width:100%"><button data-pt="nights" class="on">Nights</button><button data-pt="people">People</button></div></div>
   <div id="parcBody" style="padding:4px 12px 30px"></div>
   <div class="album-view" id="parcView" hidden>
@@ -4321,6 +4323,18 @@ const parcBase = () => {
   if(ARCV){ const h = parcHost(); return h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/view/${ARCV}` : null; }
   return PHSRV && phG && phG.av ? `${/^(localhost|127\.)/.test(PHSRV) ? "http" : "https"}://${PHSRV}/view/${phG.av}` : null;
 };
+// view-only link to the archive (works without the timer or joining the room)
+function parcLink(){
+  if(ARCV) return location.href;
+  return PHSRV && phG && phG.av ? location.origin + location.pathname + "?archive=" + phG.av + "&s=" + encodeURIComponent(PHSRV) : null;
+}
+async function parcShareLink(){
+  const url = parcLink(); if(!url) return;
+  const done = t => { $("parcShare").textContent = t; setTimeout(() => $("parcShare").textContent = "🔗 Share", 2000); };
+  if(navigator.share){ try{ await navigator.share({title:"Focus Jams archive", text:"Our Focus Jams nights, stats and photos (view-only)", url}); return; }catch(e){ if(e && e.name === "AbortError") return; } }
+  try{ await navigator.clipboard.writeText(url); done("✅ Link copied"); }
+  catch(e){ prompt("Copy this view-only link:", url); }
+}
 // the stand-alone archive page (no timer, read-only)
 function startArcView(){
   document.body.classList.add("arcview");
@@ -4382,6 +4396,7 @@ async function parcPhotos(id){
 if(SYNC || ARCV){
   $("phArcBtn").onclick = parcOpenUI;
   $("parcClose").onclick = () => { $("parc").hidden = true; };
+  $("parcShare").onclick = parcShareLink;
   $("parcTabs").onclick = e => { const b = e.target.closest("[data-pt]"); if(b){ parcTab = b.dataset.pt; parcRender(); } };
   $("parcBody").onclick = e => {
     const n = e.target.closest("[data-pn]"); if(n){ parcNight = n.dataset.pn; parcRender(); return; }
