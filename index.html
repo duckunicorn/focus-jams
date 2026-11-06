@@ -249,6 +249,10 @@
   .crew-list{display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow:auto}
   .crew-row{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;background:var(--panel2);border-radius:12px;padding:7px 10px}
   .crew-row.off{opacity:.45}
+  .crew-row{position:relative}
+  .crew-x{all:unset;position:absolute;top:0;bottom:0;margin:auto 0;right:6px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;cursor:pointer;background:var(--panel);color:var(--muted);opacity:0;transition:opacity .15s}
+  .crew-row:hover .crew-x{opacity:1} .crew-x:hover{background:var(--accent);color:var(--accent-ink)}
+  body.idle .crew-x{display:none}
   .crew-row .em{font-size:20px;text-align:center}
   .crew-row .nm{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .crew-row .gl{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -371,6 +375,9 @@
   .ph-jail{background:color-mix(in srgb,#ff3b3b 22%,transparent);border-radius:10px;padding:8px 10px;margin-top:10px;font-size:13px}
   #phRecap img{width:100%;border-radius:12px;margin-top:10px}
   .ph-hist{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6}
+  .ph-brb{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--panel2);font-size:14px;line-height:1.45}
+  .ph-leave{justify-content:center} .ph-leave button{flex:1}
+  #phLeftView{padding:16px;max-width:460px;margin:0 auto}
 
   /* ===== camera (phones + projector photo booth) ===== */
   .cam{position:fixed;inset:0;z-index:12;background:#000;color:#fff}
@@ -631,6 +638,15 @@
   </div>
 </div>
 
+<div id="phLeftView" hidden>
+  <div class="card" style="text-align:center;margin-top:20vh">
+    <div style="font-size:44px">👋</div>
+    <b style="font-size:20px" id="phLeftTitle">You left the room</b>
+    <p class="hint" id="phLeftSub" style="margin:8px 0 14px">This phone no longer follows the big screen and you're off the crew list.</p>
+    <button class="big" id="phRejoin" style="width:100%">Rejoin</button>
+  </div>
+</div>
+
 <!-- FACE DOWN -->
 <div class="phdown" id="phDown" hidden><b>🙃</b>Phone down. Nice.<span style="font-size:12px">Pick it up to see the timer</span></div>
 
@@ -719,6 +735,8 @@
     </div>
     <div class="ph-stat" id="phStats" hidden></div>
     <div class="ph-jail" id="phJail" hidden></div>
+    <div class="ph-brb" id="phBrbBox" hidden>☕ <b>You stepped out.</b> No phone jail and your focus time is paused until you're back.
+      <button class="big sm" id="phBack" style="width:100%;margin-top:8px">👋 I'm back</button></div>
     <div class="ph-down" id="phDownBox" hidden>
       <span id="phDownTxt">🙃 Face-down mode: lay your phone face down and the screen goes dark. It still counts as focusing, so no phone jail.</span>
       <button class="ghost sm" id="phDownBtn" hidden style="margin-top:8px;width:100%">🙃 Turn on face-down mode</button>
@@ -730,6 +748,10 @@
       </div>
       <button class="ghost sm" id="phAlbumBtn" style="width:100%;margin-top:8px">📸 See the album</button>
       <div class="hint" id="phPhotoMsg" style="margin-top:6px"></div>
+    </div>
+    <div class="testrow ph-leave" style="margin-top:12px">
+      <button class="ghost sm" id="phBrbBtn" title="Short break: no phone jail while you're gone">☕ Step out</button>
+      <button class="ghost sm" id="phLeaveBtn" title="Leave the room for tonight">🚪 Leave the room</button>
     </div>
   </div>
   <div class="card" id="phRecap" hidden></div>
@@ -2643,7 +2665,9 @@ function startRelay(){
 }
 async function startPhone(){
   document.body.classList.add("phone");
+  if(phShowLeft()) return;
   $("phone").hidden = false;
+  try{ if(sessionStorage.getItem("fj-rejoin")){ sessionStorage.removeItem("fj-rejoin"); phRejoinAt = Date.now(); } }catch(e){}
   $("phProg").style.strokeDasharray = C;
   setInterval(phTick, 250);
   $("phLyr").onclick = () => { curTrack = phState.song; fillLyrics(); $("lyr").showModal(); };
@@ -3315,6 +3339,9 @@ function groupMsg(m, conn){
   if(m.t === "getAlbum"){ if(conn) sendAlbum(conn, m.night, m.since || 0); return; }
   if(m.t === "getPhoto"){ if(conn) sendFullPhoto(conn, m.id); return; }
   const fromId = clean(m.from, 40);
+  // someone who left, or was removed, only comes back by tapping Rejoin on their phone
+  const gone = people[fromId] && (people[fromId].left || people[fromId].kicked);
+  if(gone && !(m.t === "hello" && m.rejoin)) return;
   if(m.t === "ping"){   // just "still here": don't create anyone
     const pp = people[fromId];
     if(pp){ pp.lastSeen = Date.now(); if(conn){ pp.online = true; pp.via = "peer"; } else if(!Array.from(connPerson.values()).includes(pp.id)) pp.via = "relay"; }
@@ -3329,6 +3356,8 @@ function groupMsg(m, conn){
       const isNew = !p.name;
       p.name = clean(m.name, 24) || p.name || "Someone"; p.emoji = EMOJIS.includes(m.emoji) ? m.emoji : p.emoji;
       if(isNew) gToast(`${p.emoji} ${escH(p.name)} joined`);
+      else if(p.left || p.kicked){ p.left = p.kicked = false; gToast(`${p.emoji} ${escH(p.name)} is back`); }
+      if(typeof m.brb === "boolean") setBrb(p, m.brb);
       if(typeof m.away === "boolean") setAway(p, m.away);
       break;
     }
@@ -3342,6 +3371,14 @@ function groupMsg(m, conn){
       celebrate(`🎉 ${p.emoji} ${escH(p.name)} finished: ${escH(p.goal)}`); groupSound("sndGoal");
       break;
     case "away": setAway(p, !!m.away); break;
+    case "brb":
+      setBrb(p, !!m.on);
+      gToast(m.on ? `☕ ${p.emoji} ${escH(p.name)} stepped out` : `👋 ${p.emoji} ${escH(p.name)} is back`);
+      break;
+    case "leave":
+      p.left = true; p.brb = false; p.away = false; p.jailed = false; p.down = false; p.online = false;
+      gToast(`🚪 ${p.emoji} ${escH(p.name)} left the room`);
+      break;
     case "down": p.down = !!m.down; break;
     case "bye": p.online = false; p.away = false; p.jailed = false; p.down = false; break;
     case "ping": changed = false; break;
@@ -3350,7 +3387,13 @@ function groupMsg(m, conn){
   }
   if(changed){ night.last = Date.now(); saveNight(m.t === "done" || m.t === "hello"); renderCrew(); syncSoon(); }
 }
+// stepped out (on purpose): no phone jail, no focus minutes, until they're back
+function setBrb(p, on){
+  p.brb = on;
+  if(on){ p.away = false; if(p.jailed){ p.jailed = false; } }
+}
 function setAway(p, away){
+  if(p.brb || p.left){ p.away = false; return; }
   if(away && !p.away){ p.away = true; p.awaySince = Date.now(); }
   else if(!away && p.away){
     p.away = false;
@@ -3381,7 +3424,7 @@ function groupSecond(){
   for(const p of Object.values(people)){
     // someone who reported leaving and then dropped off for a long time has really left
     if(!isOnline(p) && p.away && now - p.lastSeen > 15*60000){ p.away = false; if(p.jailed){ p.jailed = false; changed = true; } }
-    if(focusing && isOnline(p) && !p.away) p.focusMs += dt;
+    if(focusing && isOnline(p) && !p.away && !p.brb && !p.left && !p.kicked) p.focusMs += dt;
     if(S.gJail && focusing && p.away && !p.jailed && now - p.awaySince > S.jailGrace*1000){
       p.jailed = true; p.jailVisits++; night.jailVisits++; changed = true; groupSound("sndJailIn");
       gToast(`📵 ${p.emoji} ${escH(p.name)} went to phone jail`);
@@ -3425,12 +3468,14 @@ function groupSessionDone(){
 /* ----- what phones get ----- */
 function groupState(){
   if(!gOn() || SYNC) return null;
-  const ppl = Object.values(people).map(p => ({id:p.id, n:p.name, e:p.emoji, g:p.goal, d:p.goalDone, j:p.jailed, v:p.jailVisits,
-    m:Math.floor(p.focusMs/60000), s:p.sessions, gd:p.goalsDone}));
+  const ppl = Object.values(people).filter(p => !p.left && !p.kicked).map(p => ({id:p.id, n:p.name, e:p.emoji, g:p.goal, d:p.goalDone, j:p.jailed, v:p.jailVisits,
+    m:Math.floor(p.focusMs/60000), s:p.sessions, gd:p.goalsDone, b:p.brb ? 1 : undefined}));
+  const out = Object.values(people).filter(p => p.kicked).map(p => p.id);
   return {f:{goals:S.gGoals, jail:S.gJail, stats:S.gStats, photos:S.gPhotos}, grace:S.jailGrace, room:roomName(),
     night: night ? {id:night.id, m:Math.floor(night.focusMs/60000), s:night.sessions, gd:night.goalsDone, p:night.photos} : null,
     ppl, recap: lastRecap,
-    av: arcView && arcView.key === S.archiveKey && S.archiveKey ? arcView.token : undefined};   // read-only archive for phones
+    av: arcView && arcView.key === S.archiveKey && S.archiveKey ? arcView.token : undefined,   // read-only archive for phones
+    out: out.length ? out : undefined};   // phones the big screen removed
 }
 // the relay only carries small messages, so trim the crew list (and recap) to fit
 function relayBody(){
@@ -3469,7 +3514,7 @@ function renderCrew(){
   document.body.classList.toggle("crew", !$("crewCard").hidden);
   $("nightBtn").hidden = !(gOn() && night);
   if($("crewCard").hidden) return;
-  const list = Object.values(people).filter(p => p.name);
+  const list = Object.values(people).filter(p => p.name && !p.left && !p.kicked);
   const jailed = list.filter(p => p.jailed);
   $("jailBox").hidden = !(S.gJail && jailed.length);
   if(jailed.length) $("jailBox").innerHTML = "📵 <b>Phone jail:</b> " + jailed.map(p => `${p.emoji} ${escH(p.name)} (${fmt((Date.now() - p.awaySince)/1000)})`).join(", ");
@@ -3480,20 +3525,33 @@ function renderCrew(){
   $("boothRow").hidden = !S.gPhotos;
   $("crewTot").textContent = tot.join(" · ");
   if(!list.length){
+    $("crewList")._html = null;
     $("crewList").innerHTML = `<div class="crew-empty">Scan the QR code to join.${S.gGoals ? " Your name and goal show up here." : ""}</div>`;
     return;
   }
-  list.sort((a,b) => (isOnline(b) - isOnline(a)) || (b.focusMs - a.focusMs) || a.name.localeCompare(b.name));
-  const here = list.filter(isOnline).length;
+  const hereNow = p => isOnline(p) && !p.brb;
+  list.sort((a,b) => (hereNow(b) - hereNow(a)) || (b.focusMs - a.focusMs) || a.name.localeCompare(b.name));
+  const here = list.filter(hereNow).length;
   $("crewCard").querySelector("h2").textContent = `👥 The crew · ${here} here`;
-  $("crewList").innerHTML = list.map(p => {
-    const goal = !S.gGoals ? "" : p.goal ? `<div class="gl ${p.goalDone ? "done" : ""}">${p.goalDone ? "✅ " : "🎯 "}${escH(p.goal)}</div>` : `<div class="gl">no goal yet</div>`;
+  const crewHtml = list.map(p => {
+    const goal = p.brb ? `<div class="gl">☕ stepped out</div>` : !S.gGoals ? "" : p.goal ? `<div class="gl ${p.goalDone ? "done" : ""}">${p.goalDone ? "✅ " : "🎯 "}${escH(p.goal)}</div>` : `<div class="gl">no goal yet</div>`;
     const stat = S.gStats ? `<span class="mn">${minsTxt(p.focusMs)}${p.goalsDone ? ` · ✅${p.goalsDone}` : ""}</span>` : `<span class="mn">${p.goalsDone && S.gGoals ? "✅" + p.goalsDone : ""}</span>`;
     const down = S.gJail && p.down && !p.away ? ` <span title="Phone face down">🙃</span>` : "";
-    return `<div class="crew-row ${isOnline(p) ? "" : "off"}"><span class="em">${p.jailed ? "📵" : p.emoji}</span><div style="min-width:0"><div class="nm">${escH(p.name)}${down}</div>${goal}</div>${stat}</div>`;
+    return `<div class="crew-row ${hereNow(p) ? "" : "off"}"><span class="em">${p.jailed ? "📵" : p.brb ? "☕" : p.emoji}</span><div style="min-width:0"><div class="nm">${escH(p.name)}${down}</div>${goal}</div>${stat}<button class="crew-x" data-kick="${escH(p.id)}" title="Remove ${escH(p.name)} from the room" aria-label="Remove ${escH(p.name)}">✕</button></div>`;
   }).join("");
+  // only touch the list when it changed, so buttons in it (like ✕) aren't replaced mid-click
+  if($("crewList")._html !== crewHtml){ $("crewList").innerHTML = crewHtml; $("crewList")._html = crewHtml; }
   fitCrew();
 }
+function kickPerson(id){
+  const p = people[id]; if(!p) return;
+  if(!(window.FJ_AUTO_CONFIRM || confirm(`Remove ${p.name || "this phone"} from the room? Their phone stops following along. They can rejoin from their phone if they want.`))) return;
+  p.kicked = true; p.left = false; p.brb = false; p.away = false; p.jailed = false; p.down = false; p.online = false;
+  for(const [c, pid] of Array.from(connPerson)) if(pid === id){ try{ c.send({t:"kicked"}); }catch(e){} }
+  gToast(`${p.emoji} ${escH(p.name)} was removed`);
+  saveNight(true); renderCrew(); syncSoon(); relayPublish(true);
+}
+$("crewList").addEventListener("click", e => { const b = e.target.closest("[data-kick]"); if(b) kickPerson(b.dataset.kick); });
 // Try roomier layouts first, then denser ones, until the whole crew fits in the card.
 function fitCrew(){
   const el = $("crewList");
@@ -4027,7 +4085,31 @@ function phFlush(){
   fetch(RELAY() + "/" + relayTopic(SYNC) + "-up", {method:"POST", body:JSON.stringify(m)}).catch(() => {});
   phSendT = setTimeout(phFlush, 2500);
 }
-function phHello(){ if(me.name) phSend({t:"hello", name:me.name, emoji:me.emoji, away:document.hidden}); }
+function phHello(){ if(me.name) phSend({t:"hello", name:me.name, emoji:me.emoji, away:document.hidden && !phBrb, brb:phBrb, rejoin:phRejoinAt ? true : undefined}); }
+/* ----- stepping out (temporary) and leaving the room (for good) ----- */
+const phLeftKey = () => "fj-left-" + SYNC;
+var phBrb = SYNC ? !!store.get("fj-brb-" + SYNC) : false;
+var phRejoinAt = 0;
+function phSetBrb(on){
+  phBrb = on; store.set("fj-brb-" + SYNC, on ? 1 : null);
+  phSend({t:"brb", on});
+  if(!on) phSend({t:"away", away:document.hidden});
+  if(phG) phGroupRender(phG);
+}
+function phLeaveRoom(reason){
+  store.set(phLeftKey(), reason); store.set("fj-brb-" + SYNC, null);
+  if(reason === "left") phSend({t:"leave"});
+  setTimeout(() => { try{ if(phConn) phConn.close(); }catch(e){} location.reload(); }, reason === "left" ? 700 : 0);
+}
+// at start-up: a phone that left (or was removed) stays out until Rejoin
+function phShowLeft(){
+  const why = store.get(phLeftKey());
+  if(!why) return false;
+  $("phone").hidden = true; $("phLeftView").hidden = false;
+  if(why === "removed"){ $("phLeftTitle").textContent = "You were removed from the room"; $("phLeftSub").textContent = "The big screen took this phone off the crew list. Tap Rejoin to come back."; }
+  $("phRejoin").onclick = () => { store.set(phLeftKey(), null); sessionStorage.setItem("fj-rejoin", "1"); location.reload(); };
+  return true;
+}
 function phGroupRender(g){
   phG = g;
   const show = !!g;
@@ -4037,8 +4119,12 @@ function phGroupRender(g){
   if(show && !me.name && $("phNameBox").dataset.init !== "1") phOpenName();
   phRenderHist();
   if(!show) return;
+  // removed by the big screen (ignored right after tapping Rejoin, until the projector catches up)
+  if(g.out && g.out.includes(me.id) && me.name && Date.now() - phRejoinAt > 30000){ phLeaveRoom("removed"); return; }
   const mine = (g.ppl || []).find(p => p.id === me.id);
   $("phMeName").textContent = `${me.emoji} ${me.name}`;
+  $("phBrbBox").hidden = !phBrb;
+  $("phBrbBtn").hidden = phBrb;
   // goals
   $("phGoalBox").hidden = !g.f.goals;
   const hasGoal = mine && mine.g && !mine.d;
@@ -4052,8 +4138,8 @@ function phGroupRender(g){
   $("phJail").hidden = !g.f.jail;
   if(g.f.jail) $("phJail").innerHTML = mine && mine.j ? "📵 <b>You're in phone jail!</b> Stay on this page to get out."
     : `📵 Phone jail is on: during focus, leaving this page for more than ${g.grace}s puts your name on the big screen. Don't lock your phone; put it face down instead (it stays awake).` + (mine && mine.v ? ` (Visits tonight: ${mine.v})` : "");
-  phWake(g.f.jail);
-  phDownSetup(g.f.jail);
+  phWake(g.f.jail && !phBrb);
+  phDownSetup(g.f.jail && !phBrb);
   // read-only archive (when the projector shares one and uses its own sync server)
   $("phArcBtn").hidden = !parcBase();
   // photos
@@ -4169,6 +4255,7 @@ async function phSendPhotos(files){
 function phMsg(d){   // non-state messages from the projector
   if(d.t === "_host"){ const back = d.on && phOffline; phOffline = !d.on; if(back) phHello(); return; }   // the sync server says whether the big screen is connected; say hi again when it's back
   if(phAlbumMsg(d)) return;
+  if(d.t === "kicked"){ if(Date.now() - phRejoinAt > 30000) phLeaveRoom("removed"); return; }
   if(d && d.t === "collage" && d.night){
     phCollage[d.night] = d.data;
     if(phG && phG.recap && phG.recap.id === d.night && phRecapSeen !== d.night) phShowRecap(phG.recap);
@@ -4192,10 +4279,13 @@ if(SYNC){
   $("phPickLbl").addEventListener("click", () => { phPicking = true; clearTimeout(phPickT); phPickT = setTimeout(() => { phPicking = false; }, 120000); });
   addEventListener("focus", () => setTimeout(() => { if(phPicking && !document.hidden){ phPicking = false; } }, 1500));
   $("phCamBtn").onclick = () => camOpen("phone");
+  $("phBrbBtn").onclick = () => phSetBrb(true);
+  $("phBack").onclick = () => phSetBrb(false);
+  $("phLeaveBtn").onclick = () => { if(window.FJ_AUTO_CONFIRM || confirm("Leave the room? You'll be taken off the crew list and this phone stops following the big screen. Your time so far still counts. You can rejoin later.")) phLeaveRoom("left"); };
   // phone jail: tell the projector when this page is hidden or shown
   document.addEventListener("visibilitychange", () => {
-    if(me.name && phG && !(document.hidden && phPicking)) phSend({t:"away", away:document.hidden});
-    if(!document.hidden && phG) phWake(phG.f.jail);
+    if(me.name && phG && !phBrb && !(document.hidden && phPicking)) phSend({t:"away", away:document.hidden});
+    if(!document.hidden && phG) phWake(phG.f.jail && !phBrb);
   });
   addEventListener("pagehide", () => { if(me.name) phSend({t:"bye"}, false); });
   // keep relay-only phones counted as "here"
