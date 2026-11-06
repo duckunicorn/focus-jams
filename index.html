@@ -445,6 +445,7 @@
   #parc .album-grid.selecting button.sel .pchk{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
   #parc .album-grid.selecting button.sel img{opacity:.8}
   .parc-tools{flex-wrap:wrap;gap:6px}
+  #parcGrid button,#parcGrid img{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
   #parc .album-h .cnt{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #parc .album-h{gap:8px} #parc .album-h > button{flex:none}
   .album-view img{max-width:100%;max-height:calc(100% - 120px);object-fit:contain;border-radius:8px}
@@ -4494,6 +4495,25 @@ if(SYNC || ARCV){
       $("parcSaveOne").dataset.pp = p.dataset.pp; $("parcSaveOne").dataset.ready = ""; $("parcSaveOne").textContent = "⬇ Save photo"; $("parcSaveMsg").textContent = "";
       $("parcView").hidden = false; }
   };
+  // press and hold a photo: start selecting, with that photo picked
+  let lpT = null, lpAt = null, lpFired = false;
+  const lpCancel = () => { clearTimeout(lpT); lpT = null; };
+  $("parcBody").addEventListener("pointerdown", e => {
+    const b = e.target.closest("#parcGrid [data-pp]"); if(!b || (e.pointerType === "mouse" && e.button !== 0)) return;
+    lpFired = false; lpAt = [e.clientX, e.clientY]; lpCancel();
+    lpT = setTimeout(() => {
+      lpT = null; lpFired = true;
+      if(!parcSel) parcSel = new Set();
+      parcSel.add(b.dataset.pp); parcSelRender();
+      if(navigator.vibrate) navigator.vibrate(30);
+    }, 450);
+  });
+  $("parcBody").addEventListener("pointermove", e => { if(lpT && lpAt && Math.hypot(e.clientX - lpAt[0], e.clientY - lpAt[1]) > 10) lpCancel(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach(ev => $("parcBody").addEventListener(ev, lpCancel));
+  // the tap that ends a long press shouldn't also toggle the photo back off
+  $("parcBody").addEventListener("click", e => { if(lpFired && e.target.closest("#parcGrid [data-pp]")){ lpFired = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+  // no "save image / open in new tab" pop-up on long press in the grid
+  $("parcBody").addEventListener("contextmenu", e => { if(e.target.closest("#parcGrid")) e.preventDefault(); });
   $("parcSaveOne").onclick = () => parcSave([$("parcSaveOne").dataset.pp], $("parcSaveOne"), $("parcSaveMsg"));
   $("parcBack").onclick = () => { $("parcView").hidden = true; $("parcImg").removeAttribute("src"); };
 }
