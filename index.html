@@ -418,6 +418,10 @@
   .album-msg{padding:0 16px 20px;color:rgba(255,255,255,.7)}
   .album-view{position:fixed;inset:0;z-index:2;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px}
   .album-view[hidden]{display:none}
+  body.arcview > *:not(#parc){display:none!important}
+  body.arcview #parc{position:static;min-height:100vh}
+  body.arcview{background:#0b0b0d} body.arcview #parc .album-h{background:rgba(11,11,13,.92)}
+  body.arcview #parc .album-h,body.arcview #parcBody{max-width:900px;margin:0 auto}
   .parc-night{background:rgba(255,255,255,.06);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:13px;color:rgba(255,255,255,.75);line-height:1.5}
   .parc-night b{color:#fff;font-size:14px} .parc-night .testrow{margin:6px 0 0}
   .parc-night.mine{outline:1px solid var(--accent)}
@@ -790,6 +794,8 @@
       </div>
       <div id="arcOn" hidden>
         <div class="copyrow"><code id="arcKey"></code><button class="ghost sm" id="arcCopy">Copy key</button><button class="ghost sm" id="arcSyncBtn">Sync now</button><button class="ghost sm" id="arcLeave">Disconnect</button></div>
+        <div class="testrow"><button class="big sm" id="arcShare">🔗 Copy a view-only link</button><a class="ghost sm btnlink" id="arcShareOpen" target="_blank" rel="noopener" hidden>Open it</a></div>
+        <p class="hint" style="margin-top:4px">Anyone with this link can see the past nights, stats and photos, but can't change or delete anything. No timer, just the archive.</p>
       </div>
       <p class="hint" id="arcMsg"></p>
   </div>
@@ -1217,6 +1223,8 @@ const store = {
   set(k,v){ try{ v===null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
 };
 const SYNC = (new URLSearchParams(location.search).get("sync") || "").replace(/[^a-z0-9]/gi, "").slice(0, 16);   // phone view
+// view-only archive page: ?archive=<view token>&s=<sync server>
+const ARCV = (new URLSearchParams(location.search).get("archive") || "").toLowerCase().replace(/[^a-f0-9]/g, "").slice(0, 32);
 const SAVED = store.get("fj-settings") || {};
 const SAVED_BEFORE = Object.keys(SAVED).length > 0;   // has this browser used Focus Jams before?
 let S = Object.assign({}, DEF, SAVED);
@@ -4051,6 +4059,19 @@ $("arcJoin").onclick = () => {
 $("arcKeyIn").onkeydown = e => { if(e.key === "Enter") $("arcJoin").click(); };
 $("arcCopy").onclick = () => { navigator.clipboard.writeText(S.archiveKey).then(() => arcSay("Key copied. Paste it on the other screen under Customize → 👥 Group → Shared archive."), () => arcSay("Select the key and copy it.")); };
 $("arcSyncBtn").onclick = () => archSync();
+$("arcShare").onclick = async () => {
+  if(!arcBase()){ arcSay("Set up your sync server first."); return; }
+  try{
+    if(!arcView || arcView.key !== S.archiveKey){
+      const v = await archJson("GET", "/viewtoken");
+      arcView = {key:S.archiveKey, token:v.token}; store.set("fj-arc-view", arcView);
+    }
+    const url = location.origin + location.pathname + "?archive=" + arcView.token + "&s=" + encodeURIComponent(normHost(S.syncServer));
+    $("arcShareOpen").href = url; $("arcShareOpen").hidden = false;
+    try{ await navigator.clipboard.writeText(url); arcSay("🔗 View-only link copied. Paste it anywhere to share."); }
+    catch(e){ arcSay("Your view-only link: " + url); }
+  }catch(e){ arcSay("❌ Couldn't make the link (" + e.message + "). If you set up the server before phones had the archive, Cloudflare updates it within a few minutes."); }
+};
 $("arcLeave").onclick = () => {
   if(!(window.FJ_AUTO_CONFIRM || confirm("Stop sharing on this computer? Nothing is deleted: this computer keeps what it has, and the archive keeps everything. You can join again with the key."))) return;
   S.archiveKey = ""; save(); arcStat = null; store.set("fj-arc-stat", null); renderGroupUI();
@@ -4295,7 +4316,19 @@ if(SYNC){
 
 /* ----- phones: read-only archive (straight from the sync server, through a view-only link) ----- */
 var parcData = null, parcTab = "nights", parcNight = null, parcLoadedAt = 0;
-const parcBase = () => PHSRV && phG && phG.av ? `${/^(localhost|127\.)/.test(PHSRV) ? "http" : "https"}://${PHSRV}/view/${phG.av}` : null;
+const parcHost = () => normHost(new URLSearchParams(location.search).get("s"));
+const parcBase = () => {
+  if(ARCV){ const h = parcHost(); return h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/view/${ARCV}` : null; }
+  return PHSRV && phG && phG.av ? `${/^(localhost|127\.)/.test(PHSRV) ? "http" : "https"}://${PHSRV}/view/${phG.av}` : null;
+};
+// the stand-alone archive page (no timer, read-only)
+function startArcView(){
+  document.body.classList.add("arcview");
+  document.title = "Focus Jams · Archive";
+  $("parcClose").hidden = true;
+  if(!parcBase()){ $("parc").hidden = false; $("parcBody").innerHTML = `<p class="album-msg">This archive link is incomplete. Ask for the link again.</p>`; return; }
+  parcOpenUI();
+}
 function parcOpenUI(){
   $("parc").hidden = false; $("parcView").hidden = true; parcNight = null;
   if(!parcData || Date.now() - parcLoadedAt > 60000) parcLoad(); else parcRender();
@@ -4346,7 +4379,7 @@ async function parcPhotos(id){
     $("parcGrid").innerHTML = list.map(ph => `<button data-pp="${ph.id}" data-cap="${escH((ph.emoji || "") + " " + (ph.name || ""))}"><img loading="lazy" src="${ph.thumb || (parcBase() + "/photo/" + ph.id)}" alt=""><span>${escH((ph.emoji || "") + " " + (ph.name || ""))}</span></button>`).join("");
   }catch(e){ $("parcMsg").textContent = "Couldn't load the photos."; }
 }
-if(SYNC){
+if(SYNC || ARCV){
   $("phArcBtn").onclick = parcOpenUI;
   $("parcClose").onclick = () => { $("parc").hidden = true; };
   $("parcTabs").onclick = e => { const b = e.target.closest("[data-pt]"); if(b){ parcTab = b.dataset.pt; parcRender(); } };
@@ -4759,6 +4792,7 @@ $("nightDlg").addEventListener("close", ndSave);
 /* ================= start up ================= */
 (async function init(){
   window.FJ_READY = true;
+  if(ARCV) return startArcView();
   if(SYNC) return startPhone();
   const resume = restoreTimer();
   startHost();
