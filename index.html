@@ -413,6 +413,14 @@
   .album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px;padding:6px 12px 30px}
   body:not(.phone) .album-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;padding:10px 24px 40px}
   .album-grid button{position:relative;padding:0;border:0;background:#222;border-radius:10px;overflow:hidden;aspect-ratio:1;cursor:pointer}
+  /* "big" view: one photo per row, whole photo, full width */
+  body.gal-big .album-grid{grid-template-columns:1fr!important;max-width:820px;margin:0 auto;gap:12px}
+  body.gal-big .album-grid button{aspect-ratio:auto;min-height:80px}
+  body.gal-big .album-grid img{height:auto;max-height:85vh;object-fit:contain;background:#111}
+  body.gal-big .album-grid span{font-size:13px;padding:18px 10px 8px}
+  /* "grid" view: small squares, lots per row */
+  body:not(.gal-big) .album-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))!important;gap:6px!important}
+  body:not(.gal-big):not(.phone) .album-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))!important}
   .album-grid img{width:100%;height:100%;object-fit:cover;display:block}
   .album-grid span{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 4px;font-size:11px;text-align:left;background:linear-gradient(transparent,rgba(0,0,0,.75));color:#fff}
   .album-msg{padding:0 16px 20px;color:rgba(255,255,255,.7)}
@@ -420,6 +428,9 @@
   .album-view[hidden]{display:none}
   body.arcview > *:not(#parc){display:none!important}
   body.arcview #parc{position:static;min-height:100vh}
+  body.arcview,body.arcview.stage.crew{overflow:auto!important;height:auto!important}
+  body.arcview #parc{overflow:visible;overscroll-behavior:auto}
+  .album{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
   body.arcview{background:#0b0b0d} body.arcview #parc .album-h{background:rgba(11,11,13,.92)}
   body.arcview #parc .album-h,body.arcview #parcBody{max-width:900px;margin:0 auto}
   .parc-night{background:rgba(255,255,255,.06);border-radius:12px;padding:10px 12px;margin:8px 0;font-size:13px;color:rgba(255,255,255,.75);line-height:1.5}
@@ -626,7 +637,7 @@
 
 <!-- ALBUM -->
 <div class="album" id="album" hidden>
-  <div class="album-h"><b>📸 Album</b><span class="cnt" id="albumCount"></span>
+  <div class="album-h"><b>📸 Album</b><span class="cnt" id="albumCount"></span><button class="ghost sm" data-galview title="Switch between big photos and a grid">▦ Grid</button>
     <button class="ghost sm" id="albumZip" hidden>⬇ Download all (.zip)</button>
     <button class="big sm" id="albumClose">Close</button></div>
   <div class="album-grid" id="albumGrid"></div>
@@ -639,7 +650,7 @@
 </div>
 
 <div class="album" id="parc" hidden>
-  <div class="album-h"><b>📚 Archive</b><span class="cnt" id="parcCnt"></span><button class="ghost sm" id="parcShare" title="Share a view-only link to this archive">🔗 Share</button><button class="big sm" id="parcClose">Close</button>
+  <div class="album-h"><b>📚 Archive</b><span class="cnt" id="parcCnt"></span><button class="ghost sm" data-galview title="Switch between big photos and a grid">▦ Grid</button><button class="ghost sm" id="parcShare" title="Share a view-only link to this archive">🔗 Share</button><button class="big sm" id="parcClose">Close</button>
     <div class="seg" id="parcTabs" style="width:100%"><button data-pt="nights" class="on">Nights</button><button data-pt="people">People</button></div></div>
   <div id="parcBody" style="padding:4px 12px 30px"></div>
   <div class="album-view" id="parcView" hidden>
@@ -2344,6 +2355,7 @@ $("imgfile").onchange = e => {
 };
 
 document.addEventListener("keydown", e => {
+  if(ARCV || SYNC && !$("parc").hidden) return;   // the archive page: keys scroll, they don't control a timer
   if($("endMsgBox").classList.contains("on") && (e.key === "Escape" || e.key === "Enter" || e.key === " ")){ e.preventDefault(); hideEndMsg(); return; }
   if(!$("cam").hidden || !$("album").hidden) return;
   if((e.key === "a" || e.key === "A") && !e.target.matches("input,select") && !document.querySelector("dialog[open]") && S.gPhotos){ albumOpen("projector"); return; }
@@ -4411,6 +4423,17 @@ async function parcPhotos(id){
     parcSelRender();
   }catch(e){ $("parcMsg").textContent = "Couldn't load the photos."; }
 }
+/* ----- gallery layout: big photos (one per row) or a grid of small ones; remembered per device ----- */
+function galApply(){
+  const big = store.get("fj-galbig") === true;
+  document.body.classList.toggle("gal-big", big);
+  document.querySelectorAll("[data-galview]").forEach(b => b.textContent = big ? "▦ Grid" : "▢ Big");
+}
+document.addEventListener("click", e => {
+  if(!e.target.closest("[data-galview]")) return;
+  store.set("fj-galbig", !document.body.classList.contains("gal-big")); galApply();
+});
+galApply();
 /* ----- choosing photos and saving them ----- */
 var parcSel = null;   // null = not selecting; a Set of photo ids while selecting
 function parcSelRender(){
