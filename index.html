@@ -3310,12 +3310,13 @@ function summarize(n){
   const ppl = Object.values(n.people).map(p => ({id:p.id, name:p.name, emoji:p.emoji, focusMs:Math.round(p.focusMs), sessions:p.sessions,
     goalsDone:p.goalsDone, goals:p.goalsList.slice(-10), jailVisits:p.jailVisits})).sort((a,b) => b.focusMs - a.focusMs);
   return {id:n.id, room:n.room || roomName(), start:n.start, end:n.last, focusMs:Math.round(n.focusMs), sessions:n.sessions,
-    goalsDone:n.goalsDone, jailVisits:n.jailVisits, photos:n.photos, people:ppl};
+    goalsDone:n.goalsDone, jailVisits:n.jailVisits, photos:n.photos, people:ppl, dev:S.deviceId || undefined};   // dev: which screen recorded it
 }
 function archive(n){
   const r = summarize(n);
   if(!r.people.length && r.focusMs < 60000 && !r.photos) return null;   // nothing happened: don't clutter history
   const h = getHist();
+  markNight("fj-mine", r.id);
   h.nights = h.nights.filter(x => x.id !== r.id); h.nights.unshift(r); h.nights = h.nights.slice(0, 2000);
   for(const p of r.people){
     const a = h.people[p.id] || {name:p.name, emoji:p.emoji, nights:0, focusMs:0, sessions:0, goalsDone:0, jailVisits:0};
@@ -3987,7 +3988,8 @@ async function archSync(){
     for(const r of srv.nights || []){
       if(night && r.id === night.id) continue;
       const i = h.nights.findIndex(x => x.id === r.id);
-      if(i < 0) h.nights.push(r); else if(nightVer(r) > nightVer(h.nights[i])) h.nights[i] = r;
+      if(i < 0){ h.nights.push(r); if(r.dev !== S.deviceId) markNight("fj-pulled", r.id); }
+      else if(nightVer(r) > nightVer(h.nights[i])) h.nights[i] = r;
     }
     h.nights.sort((a,b) => b.start - a.start); h.nights = h.nights.slice(0, 2000);
     rebuildPeople(h); store.set("fj-hist", h);
@@ -4093,9 +4095,29 @@ $("arcShare").onclick = async () => {
     catch(e){ arcSay("Your view-only link: " + url); }
   }catch(e){ arcSay("❌ Couldn't make the link (" + e.message + "). If you set up the server before phones had the archive, Cloudflare updates it within a few minutes."); }
 };
-$("arcLeave").onclick = () => {
-  if(!(window.FJ_AUTO_CONFIRM || confirm("Stop sharing on this computer? Nothing is deleted: this computer keeps what it has, and the archive keeps everything. You can join again with the key."))) return;
-  S.archiveKey = ""; save(); arcStat = null; store.set("fj-arc-stat", null); renderGroupUI();
+// which nights this screen recorded itself, vs. ones that came from the shared archive
+function markNight(key, id){ const a = store.get(key) || []; if(!a.includes(id)){ a.push(id); store.set(key, a.slice(-5000)); } }
+function nightIsMine(r){
+  if(r.dev) return r.dev === S.deviceId;
+  if((store.get("fj-mine") || []).includes(r.id)) return true;
+  if((store.get("fj-pulled") || []).includes(r.id)) return false;
+  return null;   // from before screens were tracked
+}
+$("arcLeave").onclick = async () => {
+  const h = getHist();
+  const theirs = h.nights.filter(r => nightIsMine(r) === false), unknown = h.nights.filter(r => nightIsMine(r) === null);
+  const n = theirs.length;
+  if(!(window.FJ_AUTO_CONFIRM || confirm(`Stop sharing on this computer?\n\n${n ? `The ${n} night${n === 1 ? "" : "s"} other screens added will be removed from this computer (with their photos). ` : ""}This computer keeps the nights it recorded itself, and the shared archive keeps everything. You can join again with the key.`))) return;
+  let drop = theirs;
+  if(unknown.length && (window.FJ_ARC_DROP_UNKNOWN ?? confirm(`${unknown.length} older night${unknown.length === 1 ? " is" : "s are"} from before Focus Jams kept track of which screen recorded what, so it can't tell whether this computer recorded ${unknown.length === 1 ? "it" : "them"}.\n\nOK: remove ${unknown.length === 1 ? "it" : "them"} too.\nCancel: keep ${unknown.length === 1 ? "it" : "them"}.`))) drop = drop.concat(unknown);
+  const ids = new Set(drop.map(r => r.id));
+  h.nights = h.nights.filter(r => !ids.has(r.id)); rebuildPeople(h); store.set("fj-hist", h);
+  try{ for(const ph of (await idbDo("readonly", st => st.getAll(), "photos")) || []) if(ids.has(ph.night)) await idbDo("readwrite", st => st.delete(ph.id), "photos"); }catch(e){}
+  ids.forEach(id => delete collageCache[id]);
+  S.archiveKey = ""; save(); arcStat = null; arcCounts = null; arcView = null;
+  store.set("fj-arc-stat", null); store.set("fj-arc-view", null); store.set("fj-pulled", null);
+  renderGroupUI();
+  arcSay(`Disconnected. ${ids.size ? `Removed ${ids.size} night${ids.size === 1 ? "" : "s"} from other screens.` : ""}`);
 };
 if(!SYNC){
   setTimeout(() => archSoon(1), 4000);
