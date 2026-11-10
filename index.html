@@ -1289,7 +1289,9 @@ function colors(m = mode){
   const t = THEMES[S.theme] || THEMES.tomato;
   const bg = S.customBg || t.bg;
   const ink = S.customBg ? (lum(bg) > .3 ? "#1d1a17" : "#f6f2ee") : t.ink;
-  const accent = S.customAccent || t.acc[S.modeColors ? MODE_IDX[m] : 0];
+  let accent = S.customAccent || t.acc[S.modeColors ? MODE_IDX[m] : 0];
+  // album-art background: the ring, "now playing" and progress bar take the cover's color
+  if(S.bg === "art" && !S.customAccent && typeof artAccent !== "undefined" && artAccent) accent = artAccent[S.modeColors ? MODE_IDX[m] % artAccent.length : 0];
   return {bg, ink, accent, accentInk: lum(accent) > .4 ? "#141414" : "#ffffff"};
 }
 
@@ -1391,6 +1393,31 @@ function applyLook(){
   $("dim").style.opacity = S.dim / 100;
   syncSoon();
 }
+// accent colors picked from the cover: vivid, and bright enough to read on a dark (or light) page
+var artAccent = null, artAccentUrl = "";
+function hslHex(h, s, l){
+  s /= 100; l /= 100;
+  const k = n => (n + h/30) % 12, a = s * Math.min(l, 1 - l);
+  const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))).toString(16).padStart(2, "0");
+  return "#" + f(0) + f(8) + f(4);
+}
+function artAccentLoad(url){
+  artAccentUrl = url;
+  const done = pal => {
+    if(artAccentUrl !== url) return;
+    const dark = lum((THEMES[S.theme] || THEMES.tomato).bg) < .3 || !!(S.customBg && lum(S.customBg) < .3);
+    artAccent = pal && pal.length ? pal.slice().sort((a,b) => (b.s * (1 - Math.abs(b.l - 50)/60)) - (a.s * (1 - Math.abs(a.l - 50)/60))).slice(0, 3)
+      .map(c => hslHex(c.h, Math.max(62, Math.min(95, c.s)), dark ? Math.max(56, Math.min(68, c.l)) : Math.max(34, Math.min(46, c.l)))) : null;
+    applyLook();
+  };
+  if(!url){ done(null); return; }
+  const cache = window.artPalettes || (window.artPalettes = {});   // (shared with the visualizer's album colors)
+  if(cache[url]){ done(cache[url]); return; }
+  const img = new Image(); img.crossOrigin = "anonymous";
+  img.onload = () => { try{ cache[url] = paletteFromImage(img); }catch(e){ cache[url] = false; } done(cache[url] || null); };
+  img.onerror = () => done(null);
+  img.src = url;
+}
 // album-art background: two layers that cross-fade when the song changes
 var artShown = null, artLayer = 0;
 function artBgUpdate(){
@@ -1401,6 +1428,7 @@ function artBgUpdate(){
   for(const el of L){ el.style.filter = css; el.style.transform = scale; }
   if(url === artShown) return;
   artShown = url;
+  if(url !== artAccentUrl) artAccentLoad(url);
   if(!url){ for(const el of L) el.classList.remove("on"); return; }
   const img = new Image();
   img.onload = () => {
@@ -3006,7 +3034,7 @@ function vizTogglePreview(){ vizPreview = !vizPreview; vizUpdate(); }
 // Returns {bands:[0..1]x64, bass, mid, high, beat:true/false}
 var vizDisp = null, vizLastT = 0;
 /* ----- visualizer colors: rainbow, theme, or pulled from the current album cover ----- */
-var artPalettes = {}, artPal = null, artPalUrl = "";
+var artPalettes = window.artPalettes || {}, artPal = null, artPalUrl = "";
 function rgbToHsl(r, g, b){
   r /= 255; g /= 255; b /= 255;
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn)/2, d = mx - mn;
