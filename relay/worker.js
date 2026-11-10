@@ -40,7 +40,7 @@ export default {
     }
     // UIUC MTD bus times: /mtd/stops/<stop>/departures and /mtd/stops/search?query=… are passed to api.mtd.dev.
     // The MTD key comes from the server's MTD_KEY secret if set, otherwise from the page (X-ApiKey).
-    const mt = url.pathname.match(/^\/mtd\/(stops\/search|stops\/[A-Za-z0-9:_-]{1,40}\/departures)$/);
+    const mt = url.pathname.match(/^\/mtd\/(stops|stops\/search|stops\/[A-Za-z0-9:_-]{1,40}\/departures)$/);
     if (mt) {
       if (req.method !== "GET") return new Response("Read-only", { status: 405, headers: CORS });
       const key = env.MTD_KEY || req.headers.get("x-apikey") || "";
@@ -52,7 +52,8 @@ export default {
       let res = await cache.match(cacheKey);
       if (!res) {
         const up = await fetch(target, { headers: { "X-ApiKey": key, "accept": "application/json" } });
-        res = new Response(up.body, { status: up.status, headers: { "content-type": "application/json", "cache-control": "max-age=20", ...CORS } });
+        const age = mt[1] === "stops" ? 86400 : 20;   // the full stop list barely changes
+        res = new Response(up.body, { status: up.status, headers: { "content-type": "application/json", "cache-control": "max-age=" + age, ...CORS } });
         if (up.ok) await cache.put(cacheKey, res.clone());
       }
       return res;
