@@ -473,6 +473,20 @@
   .ph-hist{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6}
   .ph-ctl-row{display:flex;gap:8px;justify-content:center;margin-top:12px} .ph-ctl-row button{flex:1} .ph-ctl-row .big{flex:1.4}
   #phCtlModes button{flex:1}
+  .ph-bus{display:grid;gap:10px;margin-top:10px}
+  .pb-field{display:grid;gap:6px} .pb-field .row input{flex:1;min-width:0}
+  .pb-pick{font-size:14px;color:var(--accent)} .pb-pick:empty{display:none}
+  .pb-res{display:grid;gap:4px} .pb-res:empty{display:none}
+  .pb-res button{text-align:left;font-size:13px}
+  .pb-ride{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+  .pb-ride .mtd-pill{font-size:13px} .pb-ride .grow{flex:1;min-width:0;line-height:1.3}
+  .pb-ride small{opacity:.7}
+  .pb-watch{background:var(--panel2);border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.5}
+  .pb-watch .row{margin-top:6px;flex-wrap:wrap;gap:6px}
+  .pb-alert{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.75);display:grid;place-items:center;padding:20px;text-align:center}
+  .pb-alert[hidden]{display:none}
+  .pb-alert > div{background:var(--panel);border-radius:20px;padding:22px;max-width:360px;width:100%}
+  .pb-alert b{font-size:22px;display:block;margin:6px 0} .pb-alert p{opacity:.8;margin:0 0 14px}
   .ph-brb{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--panel2);font-size:14px;line-height:1.45}
   .ph-leave{justify-content:center} .ph-leave button{flex:1}
   #phLeftView{padding:16px;max-width:460px;margin:0 auto}
@@ -900,6 +914,22 @@
     </div>
   </div>
   <div class="card" id="phRecap" hidden></div>
+  <details class="card" id="phBusBox" hidden><summary>🚌 Bus alerts</summary>
+    <div class="ph-bus">
+      <div class="pb-field"><b>From</b><div class="pb-pick" id="pbFromSel"></div>
+        <div class="row"><input type="text" id="pbFromQ" placeholder="Stop or building" autocomplete="off"><button class="ghost sm" data-pbs="from">Search</button><button class="ghost sm" data-pbnear="from" title="Stops near me">📍</button></div>
+        <div class="pb-res" id="pbFromRes"></div></div>
+      <div class="pb-field"><b>To</b><div class="pb-pick" id="pbToSel"></div>
+        <div class="row"><input type="text" id="pbToQ" placeholder="Where are you going?" autocomplete="off"><button class="ghost sm" data-pbs="to">Search</button><button class="ghost sm" data-pbnear="to" title="Stops near me">📍</button></div>
+        <div class="pb-res" id="pbToRes"></div></div>
+      <button class="big" id="pbFind" style="width:100%;margin-top:6px">Find buses</button>
+      <div id="pbRides"></div>
+      <div id="pbWatch" class="pb-watch" hidden></div>
+      <p class="hint" id="pbMsg"></p>
+      <p class="hint">Only direct buses (no transfers). Alerts work while this page is open. Phones put it to sleep after a while, so keep it open, or add Focus Jams to your home screen for notifications.</p>
+    </div>
+  </details>
+  <div class="pb-alert" id="pbAlert" hidden><div><div style="font-size:54px">🚌</div><b id="pbAlertT"></b><p id="pbAlertS"></p><button class="big" id="pbAlertOk">Got it</button></div></div>
   <details class="card" id="phHistBox" hidden><summary>📈 My history</summary><div class="ph-hist" id="phHist"></div></details>
   <button class="ghost" id="phArcBtn" hidden style="width:100%;margin-top:4px">📚 Archive: past nights, stats &amp; photos</button>
   <div class="card" id="phHelp" hidden>
@@ -1313,6 +1343,10 @@
         <label class="mtd-sel">Show on <select id="s-mtdWhere"><option value="both">Timer and Vibes</option><option value="timer">Timer only</option><option value="vibes">Vibes only</option></select></label>
         <label class="mtd-sel">Buses <select id="s-mtdCount"><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
       </div>
+      <div class="toggles" style="margin-top:8px">
+        <label><input type="checkbox" id="s-mtdPhones"> 📱 Bus alerts on phones: people pick where they're going and get alerted when their bus is close (needs the key saved on the server as <code>MTD_KEY</code>, below)</label>
+        <label><input type="checkbox" id="s-mtdScreenAlerts"> Show people's bus alerts on the big screen too (when they choose to)</label>
+      </div>
       <p class="hint">The key stays on this computer and is sent only through your sync server to MTD (never to phones). For extra safety, put it on the server instead: in Cloudflare, open your focus-jams Worker → Settings → Variables and Secrets → add a secret named <code>MTD_KEY</code>; then you can leave the box above empty.</p>
     </div>
 
@@ -1421,7 +1455,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
              theme:"tomato", customAccent:null, customBg:null, modeColors:true,
              bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60, artAuto:true, artTarget:30,
-             mtdOn:false, mtdKey:"", mtdStop:"", mtdStopName:"", mtdCorner:"bl", mtdWhere:"both", mtdCount:4,
+             mtdOn:false, mtdKey:"", mtdStop:"", mtdStopName:"", mtdCorner:"bl", mtdWhere:"both", mtdCount:4, mtdPhones:true, mtdScreenAlerts:true,
              vibes:false, vibesBg:"art", vibesDrift:true, vibesViz:true, vibesPhotos:true, vibesRecent:true};
 
 const store = {
@@ -2667,12 +2701,13 @@ $("vibesBtn").onclick = e => { setVibes(!S.vibes); e.currentTarget.blur(); };   
 /* ================= UIUC MTD bus times ================= */
 var mtdData = null, mtdAt = 0, mtdErr = "", mtdT = null;
 function mtdBase(){
-  const h = normHost(S.syncServer);
+  const h = SYNC ? PHSRV : normHost(S.syncServer);
   return h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/mtd` : "https://api.mtd.dev";   // without a sync server, ask MTD directly
 }
 async function mtdGet(path){
   const r = await fetch(mtdBase() + path, {headers:S.mtdKey ? {"X-ApiKey":S.mtdKey} : {}, cache:"no-store"});
   let j = null; try{ j = await r.json(); }catch(e){}
+  if(r.status === 401 && SYNC) throw new Error("bus times need the MTD key on the sync server. Ask whoever runs the big screen (Customize → 🚌 Bus times explains it)");
   if(r.status === 401 || r.status === 403) throw new Error("MTD didn't accept the API key");
   if(r.status === 404 && !j) throw new Error("your sync server needs the latest update (Cloudflare installs it within a few minutes)");
   if(!r.ok || !j) throw new Error((j && (j.error && (j.error.message || j.error))) || "HTTP " + r.status);
@@ -2723,10 +2758,12 @@ function mtdStart(){
 document.addEventListener("visibilitychange", () => { if(!document.hidden && mtdVisible() && Date.now() - mtdAt > 30000) mtdPoll(); });
 function renderMtdUI(){
   $("s-mtdOn").checked = !!S.mtdOn; $("mtdSetup").hidden = !S.mtdOn;
+  $("s-mtdPhones").checked = !!S.mtdPhones; $("s-mtdScreenAlerts").checked = !!S.mtdScreenAlerts;
   $("mtdKey").value = S.mtdKey; $("s-mtdCorner").value = S.mtdCorner; $("s-mtdWhere").value = S.mtdWhere; $("s-mtdCount").value = String(S.mtdCount);
   if(!$("mtdMsg").textContent) $("mtdMsg").textContent = S.mtdStop ? `Stop: ${S.mtdStopName || S.mtdStop}` : "";
 }
-$("s-mtdOn").onchange = e => { S.mtdOn = e.target.checked; save(); renderMtdUI(); mtdStart(); };
+$("s-mtdOn").onchange = e => { S.mtdOn = e.target.checked; save(); renderMtdUI(); mtdStart(); syncSoon(); };
+["mtdPhones","mtdScreenAlerts"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); syncSoon(); });
 $("mtdKeySave").onclick = () => { S.mtdKey = $("mtdKey").value.trim(); save(); $("mtdMsg").textContent = S.mtdKey ? "Key saved." : "Key removed (the server's MTD_KEY secret is used if it has one)."; mtdData = null; mtdStart(); };
 $("mtdFind").onclick = async () => {
   const q = $("mtdQ").value.trim(); if(!q) return;
@@ -3061,6 +3098,7 @@ function syncState(){
   const c = colors();
   const playing = S.src === "app" ? np.playing : !musicPaused;
   return {v:1, mode, label:LABELS[mode], running,
+    bus: S.mtdOn && S.mtdPhones && normHost(S.syncServer) ? {id:S.mtdStop, n:S.mtdStopName} : undefined,
     remaining: running ? Math.max(0, endAt - Date.now()) : remaining*1000, total: total(mode)*1000,
     cycle, every:S.every, done:stats.done, colors:c,
     song: curTrack && curTrack.name ? {uri:curTrack.uri, name:curTrack.name, artist:curTrack.artist || "", art:curTrack.art || ""} : null,
@@ -3243,6 +3281,7 @@ function phApply(st, via){
   if(st.endMsg && phLastMode !== null && st.endMsg.seq !== phMsgSeq && st.endMsg.seq > 0) showEndMsg(st.endMsg.text, Math.min(+st.endMsg.secs || 10, 10));
   if(st.endMsg) phMsgSeq = st.endMsg.seq;
   phLastMode = st.mode; phState = st;
+  pbRoom(st.bus);
   document.body.classList.toggle("phvibes", !!st.vibes);
   // direct updates arrive instantly, so count down from "now"; relay updates may be older, so use the absolute end time
   phEnd = via === "relay" && st.running && st.endEpoch ? st.endEpoch : Date.now() + st.remaining;
@@ -4046,6 +4085,13 @@ function groupMsg(m, conn){
       else if(a === "add" && running){ endAt += 60000; remaining += 60; render(); gToast(`🎛 ${who}: +1 minute`); }
       break;
     }
+    case "busalert":
+      if(S.mtdScreenAlerts){
+        const mn = Math.max(0, Math.round(+m.min || 0));
+        const rt = clean(m.rt, 8), hs = clean(m.hs, 40), nm = hs && rt && hs.toUpperCase().startsWith(rt.toUpperCase()) ? hs : (rt + " " + hs).trim();
+        gToast(`🚌 ${p.emoji} ${escH(p.name)}'s <b>${escH(nm)}</b> ${mn <= 0 ? "is leaving" : `leaves in ${mn} min`} from ${escH(clean(m.st, 50))}`);
+      }
+      break;
     case "brb":
       setBrb(p, !!m.on);
       gToast(m.on ? `☕ ${p.emoji} ${escH(p.name)} stepped out` : `👋 ${p.emoji} ${escH(p.name)} is back`);
@@ -4825,6 +4871,164 @@ if(SYNC){
     b.disabled = true; setTimeout(() => b.disabled = false, 700);   // no accidental double taps
   });
 }
+
+/* ================= phones: bus alerts (pick from/to; alert when your bus is close) ================= */
+var pb = store.get("fj-bus") || {from:null, to:null}, pbRidesList = [], pbW = null, pbT = null;
+function pbSay(t){ $("pbMsg").textContent = t || ""; }
+function pbRenderPicks(){
+  $("pbFromSel").textContent = pb.from ? "📍 " + pb.from.n : "";
+  $("pbToSel").textContent = pb.to ? "🏁 " + pb.to.n : "";
+  $("pbFromQ").placeholder = pb.from ? "Change stop…" : "Stop or building";
+  $("pbToQ").placeholder = pb.to ? "Change destination…" : "Where are you going?";
+}
+function pbStopButtons(which, groups){
+  const dist = d => d == null ? "" : ` <span style="opacity:.6">· ${d < 1000 ? Math.round(d/10)*10 + " m" : (d/1609).toFixed(1) + " mi"}</span>`;
+  $(which === "from" ? "pbFromRes" : "pbToRes").innerHTML = groups.length ? groups.map(g => `<button class="ghost sm" data-pbpick="${which}" data-id="${escH(g.id)}" data-n="${escH(g.name)}">${escH(g.name)}${dist(g.d)}</button>`).join("")
+    : `<div class="hint">No stops found. Try another name, or 📍.</div>`;
+}
+async function pbNear(which, lat, lon){
+  const groups = {};
+  for(const st of await mtdStopsList()){
+    const id = st.stopId.split(":")[0], d = mtdDist(lat, lon, st.lat, st.lon);
+    const g = groups[id] || (groups[id] = {id, name:st.name, d});
+    g.d = Math.min(g.d, d); if(!st.stopId.includes(":")) g.name = st.name;
+  }
+  pbStopButtons(which, Object.values(groups).sort((a,b) => a.d - b.d).slice(0, 6));
+}
+async function pbSearch(which){
+  const q = $(which === "from" ? "pbFromQ" : "pbToQ").value.trim(); if(!q) return;
+  pbSay("Searching…");
+  try{
+    const res = await mtdGet("/stops/search?query=" + encodeURIComponent(q));
+    const seen = new Set(), groups = [];
+    for(const st of res){ const id = st.stopId.split(":")[0]; if(!seen.has(id)){ seen.add(id); groups.push({id, name:st.name}); } }
+    if(groups.length){ pbStopButtons(which, groups.slice(0, 6)); pbSay(""); return; }
+    // not a stop name: treat it as a place (building) and list stops near it
+    const r = await (await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&bounded=1&viewbox=-88.36,40.17,-88.13,40.04&q=" + encodeURIComponent(q))).json();
+    if(!r || !r[0]){ pbStopButtons(which, []); pbSay(""); return; }
+    await pbNear(which, +r[0].lat, +r[0].lon); pbSay(`Stops near ${r[0].name || q}:`);
+  }catch(e){ pbSay("❌ " + e.message); }
+}
+function pbPick(which, id, n){
+  pb[which] = {id, n}; store.set("fj-bus", pb);
+  $(which === "from" ? "pbFromRes" : "pbToRes").innerHTML = ""; $(which === "from" ? "pbFromQ" : "pbToQ").value = "";
+  pbRenderPicks(); $("pbRides").innerHTML = "";
+}
+const pbTime = d => Date.parse(d.estimatedDeparture || d.scheduledDeparture);
+async function pbFind(){
+  if(!pb.from || !pb.to){ pbSay("Pick where you're leaving from and where you're going."); return; }
+  if(pb.from.id === pb.to.id){ pbSay("Those are the same stop."); return; }
+  pbSay("Looking for buses…"); $("pbRides").innerHTML = "";
+  try{
+    const [A, B] = await Promise.all([mtdGet(`/stops/${encodeURIComponent(pb.from.id)}/departures?time=90`), mtdGet(`/stops/${encodeURIComponent(pb.to.id)}/departures?time=150`)]);
+    const atB = {};
+    for(const d of B){ const t = d.trip && d.trip.tripId; if(t) (atB[t] = atB[t] || []).push(pbTime(d)); }
+    pbRidesList = A.map(d => {
+      const t = d.trip && d.trip.tripId, dep = pbTime(d);
+      const arr = t && atB[t] ? atB[t].filter(x => x > dep).sort((a,b) => a - b)[0] : null;
+      return arr ? {d, trip:t, dep, arr} : null;
+    }).filter(Boolean).sort((a,b) => a.dep - b.dep).slice(0, 6);
+    if(!pbRidesList.length){ pbSay(`No direct buses from ${pb.from.n} to ${pb.to.n} in the next 90 minutes. (Rides with a transfer aren't shown.)`); return; }
+    pbSay("Tap 🔔 to get alerted before the bus reaches your stop.");
+    const hm = t => new Date(t).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
+    $("pbRides").innerHTML = pbRidesList.map((r, i) => {
+      const rt = r.d.route || {}, mins = Math.max(0, Math.round((r.dep - Date.now()) / 60000));
+      return `<div class="pb-ride"><span class="mtd-pill" style="background:#${escH(rt.color || "777777")};color:#${escH(rt.textColor || "ffffff")}">${escH(rt.shortName || "")}</span>
+        <div class="grow"><b>${mins <= 0 ? "Leaving now" : `In ${mins} min`}</b>${r.d.isRealTime ? " <span style=\"color:#3ddc84\">●</span>" : " <small>(scheduled)</small>"}<br><small>${escH(r.d.headsign || rt.longName || "")} · leaves ${hm(r.dep)}, arrives ${hm(r.arr)}</small></div>
+        <button class="ghost sm" data-pbwatch="${i}">🔔</button></div>`;
+    }).join("");
+  }catch(e){ pbSay("❌ " + e.message); }
+}
+async function pbNotifyPermission(){
+  try{
+    if(!("Notification" in window) || Notification.permission !== "default") return;
+    await Notification.requestPermission();
+  }catch(e){}
+}
+var pbSW = null;
+if(SYNC && "serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").then(r => { pbSW = r; }).catch(() => {});
+// "22N ILLINI" already says 22, so don't show "22 22N ILLINI"
+const busName = (rt, hs) => hs && rt && hs.toUpperCase().startsWith(String(rt).toUpperCase()) ? hs : [rt, hs].filter(Boolean).join(" ");
+function pbWatchStart(r){
+  const rt = r.d.route || {};
+  pbW = {trip:r.trip, from:pb.from, to:pb.to, rt:rt.shortName || "", hs:r.d.headsign || rt.longName || "", color:rt.color, text:rt.textColor,
+    dep:r.dep, lead:pbW ? pbW.lead : 5, screen:pbW ? pbW.screen : !!(phState && phState.bus), fired:false, live:r.d.isRealTime};
+  try{ sessionStorage.setItem("fj-buswatch", JSON.stringify(pbW)); }catch(e){}
+  unlockAudio(); pbNotifyPermission();
+  pbWatchRender(); clearInterval(pbT); pbT = setInterval(pbWatchPoll, 20000); pbWatchPoll();
+}
+function pbWatchStop(){ pbW = null; clearInterval(pbT); pbT = null; try{ sessionStorage.removeItem("fj-buswatch"); }catch(e){} $("pbWatch").hidden = true; }
+function pbWatchRender(){
+  if(!pbW){ $("pbWatch").hidden = true; return; }
+  const mins = Math.max(0, Math.round((pbW.dep - Date.now()) / 60000));
+  $("pbWatch").hidden = false;
+  $("pbWatch").innerHTML = `🔔 <b>Watching the ${escH(busName(pbW.rt, pbW.hs))}</b><br>Leaves ${escH(pbW.from.n)} ${mins <= 0 ? "now" : `in <b>${mins} min</b>`}${pbW.live ? " (live)" : " (scheduled)"}
+    <div class="row"><label style="font-size:13px">Alert me <select id="pbLead">${[2,3,5,8,10,15].map(n => `<option value="${n}"${n === pbW.lead ? " selected" : ""}>${n} min</option>`).join("")}</select> before</label>
+    ${phState && phState.bus ? `<label style="font-size:13px"><input type="checkbox" id="pbScreen"${pbW.screen ? " checked" : ""}> Also show it on the big screen</label>` : ""}
+    <button class="ghost sm" id="pbStop">Stop watching</button></div>`;
+  $("pbLead").onchange = e => { pbW.lead = +e.target.value; pbW.fired = false; pbSave(); pbWatchCheck(); };
+  if($("pbScreen")) $("pbScreen").onchange = e => { pbW.screen = e.target.checked; pbSave(); };
+  $("pbStop").onclick = pbWatchStop;
+}
+function pbSave(){ try{ sessionStorage.setItem("fj-buswatch", JSON.stringify(pbW)); }catch(e){} }
+async function pbWatchPoll(){
+  if(!pbW) return;
+  try{
+    const A = await mtdGet(`/stops/${encodeURIComponent(pbW.from.id)}/departures?time=90`);
+    const d = A.find(x => x.trip && x.trip.tripId === pbW.trip);
+    if(!d){ if(Date.now() > pbW.dep - 60000){ pbSay(`Your ${busName(pbW.rt, pbW.hs)} has left ${pbW.from.n}.`); pbWatchStop(); return; } }
+    else { pbW.dep = pbTime(d); pbW.live = d.isRealTime; }
+    pbSave();
+  }catch(e){}
+  pbWatchRender(); pbWatchCheck();
+}
+function pbWatchCheck(){
+  if(!pbW || pbW.fired) return;
+  const mins = (pbW.dep - Date.now()) / 60000;
+  if(mins > pbW.lead) return;
+  pbW.fired = true; pbSave();
+  const m = Math.max(0, Math.round(mins));
+  const title = `Your ${busName(pbW.rt, pbW.hs)} ${m <= 0 ? "is leaving now" : `leaves in ${m} min`}`, body = `From ${pbW.from.n}${pbW.to ? " · to " + pbW.to.n : ""}`;
+  // on this phone: buzz, sound, big message, and a notification if allowed
+  try{ navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 600]); }catch(e){}
+  try{ unlockAudio(); playSound("chime", undefined, 2); }catch(e){}
+  $("pbAlertT").textContent = title; $("pbAlertS").textContent = body; $("pbAlert").hidden = false;
+  try{
+    if("Notification" in window && Notification.permission === "granted"){
+      if(pbSW && pbSW.showNotification) pbSW.showNotification("🚌 " + title, {body, tag:"fj-bus", renotify:true, data:{url:location.href}});
+      else new Notification("🚌 " + title, {body, tag:"fj-bus"});
+    }
+  }catch(e){}
+  if(pbW.screen) phSend({t:"busalert", rt:pbW.rt, hs:pbW.hs, st:pbW.from.n, min:m});
+}
+if(SYNC){
+  $("phBusBox").addEventListener("click", e => {
+    const s1 = e.target.closest("[data-pbs]"); if(s1) pbSearch(s1.dataset.pbs);
+    const nr = e.target.closest("[data-pbnear]");
+    if(nr){
+      const which = nr.dataset.pbnear;
+      if(!navigator.geolocation){ pbSay("This phone can't share its location here."); return; }
+      pbSay("Finding stops near you…");
+      navigator.geolocation.getCurrentPosition(p => pbNear(which, p.coords.latitude, p.coords.longitude).then(() => pbSay("")).catch(err => pbSay("❌ " + err.message)),
+        () => pbSay("Location wasn't shared. Type a stop or building instead."), {timeout:15000, maximumAge:120000});
+    }
+    const pk = e.target.closest("[data-pbpick]"); if(pk) pbPick(pk.dataset.pbpick, pk.dataset.id, pk.dataset.n);
+    const w = e.target.closest("[data-pbwatch]"); if(w && pbRidesList[+w.dataset.pbwatch]) pbWatchStart(pbRidesList[+w.dataset.pbwatch]);
+  });
+  ["pbFromQ","pbToQ"].forEach(id => $(id).onkeydown = e => { if(e.key === "Enter") pbSearch(id === "pbFromQ" ? "from" : "to"); });
+  $("pbFind").onclick = pbFind;
+  $("pbAlertOk").onclick = () => { $("pbAlert").hidden = true; };
+  try{ const w = JSON.parse(sessionStorage.getItem("fj-buswatch")); if(w && w.dep > Date.now() - 120000){ pbW = w; pbWatchRender(); pbT = setInterval(pbWatchPoll, 20000); pbWatchPoll(); } }catch(e){}
+  setInterval(() => { if(pbW){ pbWatchRender(); pbWatchCheck(); } }, 15000);   // count down between checks
+}
+// show the card when the big screen offers bus alerts; start from the room's stop
+function pbRoom(bus){
+  $("phBusBox").hidden = !bus;
+  if(!bus) return;
+  if(!pb.from && bus.id){ pb.from = {id:bus.id.split(":")[0], n:(bus.n || bus.id).replace(/\s*\(.*\)$/, "")}; }
+  pbRenderPicks();
+}
+
 /* ----- stepping out (temporary) and leaving the room (for good) ----- */
 const phLeftKey = () => "fj-left-" + SYNC;
 var phBrb = SYNC ? !!store.get("fj-brb-" + SYNC) : false;
