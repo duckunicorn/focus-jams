@@ -21,7 +21,7 @@ const MAX_MSG = 1_000_000;   // Cloudflare's WebSocket message limit is 1 MiB
 const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type",
+  "access-control-allow-headers": "content-type, x-apikey",
   "access-control-max-age": "86400",
 };
 
@@ -37,6 +37,25 @@ export default {
     if (ar) {
       const box = env.ARCHIVES.get(env.ARCHIVES.idFromName(ar[1].toLowerCase()));
       return box.fetch(req);
+    }
+    // UIUC MTD bus times: /mtd/stops/<stop>/departures and /mtd/stops/search?query=… are passed to api.mtd.dev.
+    // The MTD key comes from the server's MTD_KEY secret if set, otherwise from the page (X-ApiKey).
+    const mt = url.pathname.match(/^\/mtd\/(stops\/search|stops\/[A-Za-z0-9:_-]{1,40}\/departures)$/);
+    if (mt) {
+      if (req.method !== "GET") return new Response("Read-only", { status: 405, headers: CORS });
+      const key = env.MTD_KEY || req.headers.get("x-apikey") || "";
+      if (!key) return json({ error: "no MTD key" }, 401);
+      const target = "https://api.mtd.dev/" + mt[1] + url.search;
+      // short cache so several screens at the same stop share one request
+      const cacheKey = new Request(target + (url.search ? "&" : "?") + "_k=" + key.slice(-6), { method: "GET" });
+      const cache = caches.default;
+      let res = await cache.match(cacheKey);
+      if (!res) {
+        const up = await fetch(target, { headers: { "X-ApiKey": key, "accept": "application/json" } });
+        res = new Response(up.body, { status: up.status, headers: { "content-type": "application/json", "cache-control": "max-age=20", ...CORS } });
+        if (up.ok) await cache.put(cacheKey, res.clone());
+      }
+      return res;
     }
     // read-only view of an archive (for phones): /view/<token>/nights | /photos?night= | /photo/<id>
     const vw = url.pathname.match(/^\/view\/([a-f0-9]{32})(\/.*)?$/);

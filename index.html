@@ -48,6 +48,36 @@
   #bgArt[hidden]{display:none}
   #bgArt i{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity 1.4s ease;will-change:opacity}
   #bgArt i.on{opacity:1}
+  /* ===== bus times ===== */
+  .mtd{position:fixed;z-index:6;width:clamp(240px,21vw,400px);background:color-mix(in srgb,var(--bg) 72%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid color-mix(in srgb,var(--ink) 12%,transparent);border-radius:16px;padding:10px 12px;color:var(--ink);font-size:clamp(12px,.95vw,17px);box-shadow:0 8px 30px rgba(0,0,0,.25)}
+  .mtd[hidden]{display:none}
+  .mtd.bl{left:1.4vw;bottom:2vh} .mtd.br{right:1.4vw;bottom:2vh} .mtd.tl{left:1.4vw;top:12vh} .mtd.tr{right:1.4vw;top:12vh}
+  .mtd-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px;font-size:.92em}
+  .mtd-h b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .mtd-h > span:last-child{opacity:.55;font-size:.85em;white-space:nowrap}
+  .mtd-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid color-mix(in srgb,var(--ink) 8%,transparent)}
+  .mtd-pill{flex:none;min-width:2.3em;text-align:center;font-weight:700;border-radius:6px;padding:2px 5px;font-size:.9em}
+  .mtd-hs{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mtd-min{flex:none;font-weight:700;font-variant-numeric:tabular-nums;text-align:right}
+  .mtd-min.sched{font-weight:500;opacity:.7;font-style:italic}
+  .mtd-min .rt{display:inline-block;width:.45em;height:.45em;border-radius:50%;background:#3ddc84;margin-right:.35em;vertical-align:middle;animation:mtdpulse 2s infinite}
+  @keyframes mtdpulse{50%{opacity:.35}}
+  .mtd-empty{opacity:.6;padding:4px 0}
+  .mtd-results{display:grid;gap:4px;margin-top:6px}
+  .mtd-results button{text-align:left}
+  .mtd-sel{display:flex;gap:6px;align-items:center;font-size:13px}
+  body.vibes.idle .mtd{opacity:1}
+  /* timer view: a slim strip along the edge, and the layout makes room for it so nothing is covered */
+  .mtd.strip{width:auto;max-width:calc(100vw - 2.8vw);display:flex;align-items:center;gap:1vw;padding:7px 14px;border-radius:14px}
+  .mtd.strip .mtd-h{margin:0;flex:none;max-width:22vw} .mtd.strip .mtd-h > span:last-child{display:none}
+  .mtd.strip #mtdList{display:flex;gap:1.1vw;min-width:0;overflow:hidden}
+  .mtd.strip .mtd-row{border:0;padding:0;gap:5px;flex:none}
+  .mtd.strip .mtd-hs{display:none}
+  .mtd.strip.bl,.mtd.strip.br{bottom:1.2vh} .mtd.strip.tl,.mtd.strip.tr{top:1vh}
+  body.mtd-b .wrap{padding-bottom:calc(2.2vh + 52px)!important}
+  body.mtd-t .wrap{padding-top:calc(2.2vh + 50px)!important}
+  body.stage.crew.mtd-b .wrap,body.stage.crew.mtd-t .wrap{height:100vh;box-sizing:border-box}
+  body.stage:not(.crew).mtd-b .ringbox,body.stage:not(.crew).mtd-t .ringbox{width:min(49vh,40vw);margin:1.5vh auto}
+  body.stage:not(.crew).mtd-b .time,body.stage:not(.crew).mtd-t .time,body.stage.crew .time{font-size:clamp(60px,min(9.5vw,13.5vh),190px)}   /* digits stay inside the smaller ring */
   /* ===== Vibes mode ===== */
   #vibes{display:none}
   body.vibes #vibes{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:calc(100vh - 110px);gap:1.5vh;padding-bottom:10vh}
@@ -526,7 +556,7 @@
 </style>
 </head>
 <body>
-<div id="bg"></div><div id="bgArt" hidden><i></i><i></i></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><canvas id="vViz"></canvas><div class="v-photo" id="vPhoto" hidden><img alt=""><img alt=""></div><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><div class="vizconnect-wrap"><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button></div>
+<div id="bg"></div><div id="bgArt" hidden><i></i><i></i></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><canvas id="vViz"></canvas><div class="mtd" id="mtdBox" hidden><div class="mtd-h"><b>🚌 <span id="mtdStopName"></span></b><span id="mtdAge"></span></div><div id="mtdList"></div></div><div class="v-photo" id="vPhoto" hidden><img alt=""><img alt=""></div><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><div class="vizconnect-wrap"><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button></div>
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
@@ -1208,6 +1238,26 @@
     <label class="ghost sm">Upload your own image<input type="file" id="imgfile" accept="image/*" hidden></label>
     <span class="hint" id="imgMsg"></span>
 
+    <h3>🚌 Bus times (UIUC MTD)</h3>
+    <p class="hint" style="margin-top:0">Live departures from a nearby stop, in a corner of the screen.</p>
+    <div class="toggles"><label><input type="checkbox" id="s-mtdOn"> Show bus times</label></div>
+    <div id="mtdSetup">
+      <ol class="steps" style="margin-top:8px">
+        <li>Get a free API key: sign up at <a href="https://mtd.dev/account/keys" target="_blank" rel="noopener">mtd.dev/account/keys</a> and create a key. Paste it here:
+          <div class="row" style="margin-top:6px"><input type="password" id="mtdKey" placeholder="MTD API key" autocomplete="off" spellcheck="false"><button class="ghost sm" id="mtdKeySave">Save</button></div></li>
+        <li>Find your stop:
+          <div class="row" style="margin-top:6px"><input type="text" id="mtdQ" placeholder="e.g. Illini Union, Green & Wright" autocomplete="off"><button class="ghost sm" id="mtdFind">Search</button></div>
+          <div id="mtdResults" class="mtd-results"></div></li>
+      </ol>
+      <p class="hint" id="mtdMsg"></p>
+      <div class="row" style="flex-wrap:wrap;gap:10px;margin-top:4px">
+        <label class="mtd-sel">Corner <select id="s-mtdCorner"><option value="bl">Bottom left</option><option value="br">Bottom right</option><option value="tl">Top left</option><option value="tr">Top right</option></select></label>
+        <label class="mtd-sel">Show on <select id="s-mtdWhere"><option value="both">Timer and Vibes</option><option value="timer">Timer only</option><option value="vibes">Vibes only</option></select></label>
+        <label class="mtd-sel">Buses <select id="s-mtdCount"><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+      </div>
+      <p class="hint">The key stays on this computer and is sent only through your sync server to MTD (never to phones). For extra safety, put it on the server instead: in Cloudflare, open your focus-jams Worker → Settings → Variables and Secrets → add a secret named <code>MTD_KEY</code>; then you can leave the box above empty.</p>
+    </div>
+
     <h3>🌙 Vibes mode</h3>
     <p class="hint" style="margin-top:0">A big clock and the music, no timer. For hanging out. Turn it on with <b>🌙 Vibes</b> at the top (or press B). Pick a background while in Vibes mode to give it its own.</p>
     <div class="toggles">
@@ -1323,6 +1373,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
              theme:"tomato", customAccent:null, customBg:null, modeColors:true,
              bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60, artAuto:true, artTarget:30,
+             mtdOn:false, mtdKey:"", mtdStop:"", mtdStopName:"", mtdCorner:"bl", mtdWhere:"both", mtdCount:4,
              vibes:false, vibesBg:"art", vibesDrift:true, vibesViz:true, vibesPhotos:true, vibesRecent:true};
 
 const store = {
@@ -1548,6 +1599,7 @@ function renderLookUI(){
   $("c-bg").value = c.bg;
   $("s-modeColors").checked = S.modeColors;
   ["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).checked = !!S[k]);
+  renderMtdUI();
   $("s-dim").value = S.dim; $("s-blur").value = S.blur; $("s-glass").value = S.glass; $("s-artBlur").value = S.artBlur;
   $("artBlurRow").hidden = curBg() !== "art";
   $("artAutoRow").hidden = curBg() !== "art"; $("artTargetRow").hidden = curBg() !== "art" || !S.artAuto;
@@ -2451,7 +2503,7 @@ function clockHtml(d, small){
 }
 function setVibes(on){
   if(on && running){ running = false; stopTick(); remaining = Math.max(0, (endAt - Date.now())/1000); cancelSound(); render(); }   // timer waits; music keeps playing
-  S.vibes = on; save(); applyVibes(); applyLook(); renderLookUI(); syncSoon(); relayPublish(true);
+  S.vibes = on; save(); applyVibes(); applyLook(); renderLookUI(); syncSoon(); relayPublish(true); mtdStart();
 }
 function applyVibes(){
   const on = !!S.vibes && !SYNC;
@@ -2562,6 +2614,90 @@ function vibesViz(ts){
 }
 $("vibesBtn").onclick = e => { setVibes(!S.vibes); e.currentTarget.blur(); };   // (blur: so Space doesn't press it again)
 ["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); applyVibes(); });
+
+
+/* ================= UIUC MTD bus times ================= */
+var mtdData = null, mtdAt = 0, mtdErr = "", mtdT = null;
+function mtdBase(){
+  const h = normHost(S.syncServer);
+  return h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/mtd` : "https://api.mtd.dev";   // without a sync server, ask MTD directly
+}
+async function mtdGet(path){
+  const r = await fetch(mtdBase() + path, {headers:S.mtdKey ? {"X-ApiKey":S.mtdKey} : {}, cache:"no-store"});
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if(r.status === 401 || r.status === 403) throw new Error("MTD didn't accept the API key");
+  if(r.status === 404 && !j) throw new Error("your sync server needs the latest update (Cloudflare installs it within a few minutes)");
+  if(!r.ok || !j) throw new Error((j && (j.error && (j.error.message || j.error))) || "HTTP " + r.status);
+  return j.result || [];
+}
+async function mtdPoll(){
+  if(!mtdVisible() || document.hidden) return;
+  try{
+    mtdData = (await mtdGet(`/stops/${encodeURIComponent(S.mtdStop)}/departures?time=60`))
+      .sort((a,b) => (a.minutesTillDeparture ?? 999) - (b.minutesTillDeparture ?? 999));
+    mtdAt = Date.now(); mtdErr = "";
+  }catch(e){ mtdErr = e.message || String(e); }
+  mtdRender();
+}
+function mtdVisible(){
+  if(SYNC || ARCV || !S.mtdOn || !S.mtdStop) return false;
+  return S.mtdWhere === "both" || (S.mtdWhere === "vibes") === !!S.vibes;
+}
+function mtdRender(){
+  const box = $("mtdBox"), on = mtdVisible();
+  box.hidden = !on;
+  if(!on){ document.body.classList.remove("mtd-b", "mtd-t"); return; }
+  const corner = ["bl","br","tl","tr"].includes(S.mtdCorner) ? S.mtdCorner : "bl", strip = !S.vibes;
+  box.className = "mtd " + corner + (strip ? " strip" : "");
+  document.body.classList.toggle("mtd-b", strip && corner[0] === "b");
+  document.body.classList.toggle("mtd-t", strip && corner[0] === "t");
+  $("mtdStopName").textContent = S.mtdStopName || S.mtdStop;
+  $("mtdAge").textContent = mtdErr ? "⚠️ offline" : mtdAt ? "live" : "";
+  if(mtdErr && !mtdData){ $("mtdList").innerHTML = `<div class="mtd-empty">Couldn't get bus times: ${escH(mtdErr)}</div>`; return; }
+  if(!mtdData){ $("mtdList").innerHTML = `<div class="mtd-empty">Loading…</div>`; return; }
+  // count down between updates using the estimated times
+  const now = Date.now();
+  const rows = mtdData.map(d => {
+    const t = Date.parse(d.estimatedDeparture || d.scheduledDeparture);
+    return Object.assign({}, d, {min: isNaN(t) ? d.minutesTillDeparture : Math.floor((t - now) / 60000)});
+  }).filter(d => d.min >= 0).slice(0, +S.mtdCount || 4);
+  $("mtdList").innerHTML = rows.length ? rows.map(d => {
+    const r = d.route || {}, bg = "#" + (r.color || "777777"), fg = "#" + (r.textColor || "ffffff");
+    return `<div class="mtd-row"><span class="mtd-pill" style="background:${escH(bg)};color:${escH(fg)}">${escH(r.shortName || "")}</span><span class="mtd-hs">${escH(d.headsign || r.longName || "")}</span><span class="mtd-min${d.isRealTime ? "" : " sched"}">${d.isRealTime ? `<i class="rt"></i>` : ""}${d.min <= 0 ? "Due" : d.min + " min"}</span></div>`;
+  }).join("") : `<div class="mtd-empty">No buses in the next hour.</div>`;
+}
+function mtdStart(){
+  clearInterval(mtdT); mtdT = null;
+  if(!mtdVisible()){ mtdRender(); return; }
+  mtdRender(); mtdPoll();
+  mtdT = setInterval(() => { if(Date.now() - mtdAt > 45000) mtdPoll(); else mtdRender(); }, 15000);   // ~80 requests an hour
+}
+document.addEventListener("visibilitychange", () => { if(!document.hidden && mtdVisible() && Date.now() - mtdAt > 30000) mtdPoll(); });
+function renderMtdUI(){
+  $("s-mtdOn").checked = !!S.mtdOn; $("mtdSetup").hidden = !S.mtdOn;
+  $("mtdKey").value = S.mtdKey; $("s-mtdCorner").value = S.mtdCorner; $("s-mtdWhere").value = S.mtdWhere; $("s-mtdCount").value = String(S.mtdCount);
+  if(!$("mtdMsg").textContent) $("mtdMsg").textContent = S.mtdStop ? `Stop: ${S.mtdStopName || S.mtdStop}` : "";
+}
+$("s-mtdOn").onchange = e => { S.mtdOn = e.target.checked; save(); renderMtdUI(); mtdStart(); };
+$("mtdKeySave").onclick = () => { S.mtdKey = $("mtdKey").value.trim(); save(); $("mtdMsg").textContent = S.mtdKey ? "Key saved." : "Key removed (the server's MTD_KEY secret is used if it has one)."; mtdData = null; mtdStart(); };
+$("mtdFind").onclick = async () => {
+  const q = $("mtdQ").value.trim(); if(!q) return;
+  if($("mtdKey").value.trim() !== S.mtdKey){ S.mtdKey = $("mtdKey").value.trim(); save(); }
+  $("mtdMsg").textContent = "Searching…"; $("mtdResults").innerHTML = "";
+  try{
+    const res = (await mtdGet("/stops/search?query=" + encodeURIComponent(q))).slice(0, 8);
+    $("mtdMsg").textContent = res.length ? "Pick your stop (a shelter/side, or the whole stop):" : "No stops found. Try another name.";
+    $("mtdResults").innerHTML = res.map(st => `<button class="ghost sm" data-mstop="${escH(st.stopId)}" data-mname="${escH(st.name + (st.subName ? " (" + st.subName + ")" : ""))}">${escH(st.name)}${st.subName ? ` <span style="opacity:.6">(${escH(st.subName)})</span>` : " <span style=\"opacity:.6\">(all sides)</span>"}</button>`).join("");
+  }catch(e){ $("mtdMsg").textContent = "❌ " + e.message + (normHost(S.syncServer) ? "" : ". Setting up your sync server (Customize → 👥 Group) usually fixes this."); }
+};
+$("mtdQ").onkeydown = e => { if(e.key === "Enter") $("mtdFind").click(); };
+$("mtdResults").onclick = e => {
+  const b = e.target.closest("[data-mstop]"); if(!b) return;
+  S.mtdStop = b.dataset.mstop; S.mtdStopName = b.dataset.mname; save();
+  $("mtdResults").innerHTML = ""; $("mtdMsg").textContent = `✅ Showing buses from ${S.mtdStopName}.`;
+  mtdData = null; mtdStart();
+};
+[["s-mtdCorner","mtdCorner",String],["s-mtdWhere","mtdWhere",String],["s-mtdCount","mtdCount",Number]].forEach(([id,k,f]) => $(id).onchange = e => { S[k] = f(e.target.value); save(); mtdStart(); });
 
 /* clock */
 function renderClock(){
@@ -5311,7 +5447,7 @@ $("nightDlg").addEventListener("close", ndSave);
   if(ARCV) return startArcView();
   if(SYNC) return startPhone();
   const resume = restoreTimer();
-  applyVibes();
+  applyVibes(); mtdStart();
   startHost();
   renderChips();
   render();
