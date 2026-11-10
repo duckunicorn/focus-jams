@@ -254,6 +254,10 @@
   .crew-row{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;background:var(--panel2);border-radius:12px;padding:7px 10px}
   .crew-row.off{opacity:.45}
   .crew-row{position:relative}
+  .crew-acts{position:absolute;top:0;bottom:0;right:6px;display:flex;gap:4px;align-items:center}
+  .crew-acts .crew-x{position:static!important;margin:0!important}
+  .crew-c.on{background:var(--accent);color:var(--accent-ink)}
+  .ctl-badge{font-size:.8em;opacity:.8}
   .crew-x{all:unset;position:absolute;top:0;bottom:0;margin:auto 0;right:6px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;cursor:pointer;background:var(--panel);color:var(--muted);opacity:0;transition:opacity .15s}
   .crew-row:hover .crew-x{opacity:1} .crew-x:hover{background:var(--accent);color:var(--accent-ink)}
   body.idle .crew-x{display:none}
@@ -379,6 +383,8 @@
   .ph-jail{background:color-mix(in srgb,#ff3b3b 22%,transparent);border-radius:10px;padding:8px 10px;margin-top:10px;font-size:13px}
   #phRecap img{width:100%;border-radius:12px;margin-top:10px}
   .ph-hist{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.6}
+  .ph-ctl-row{display:flex;gap:8px;justify-content:center;margin-top:12px} .ph-ctl-row button{flex:1} .ph-ctl-row .big{flex:1.4}
+  #phCtlModes button{flex:1}
   .ph-brb{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--panel2);font-size:14px;line-height:1.45}
   .ph-leave{justify-content:center} .ph-leave button{flex:1}
   #phLeftView{padding:16px;max-width:460px;margin:0 auto}
@@ -731,6 +737,12 @@
       <div class="center"><div class="time" id="phTime">--:--</div><div class="label" id="phLabel">Waiting</div></div>
     </div>
     <div class="dots" id="phDots" style="margin-top:14px;margin-bottom:0"></div>
+    <div id="phCtl" hidden>
+      <div class="seg" id="phCtlModes" style="margin-top:14px"><button data-pm="focus">Focus</button><button data-pm="short">Short break</button><button data-pm="long">Long break</button></div>
+      <div class="ph-ctl-row"><button class="ghost" data-pc="reset">↺ Reset</button><button class="big" data-pc="toggle" id="phCtlGo">Start</button><button class="ghost" data-pc="skip">⏭ Skip</button></div>
+      <div class="ph-ctl-row" style="margin-top:6px"><button class="ghost sm" data-pc="add">+1 min</button></div>
+      <div class="hint" style="text-align:center;margin-top:6px">🎛 You can control the big screen's timer</div>
+    </div>
   </div>
   <div class="card" id="phSongCard" hidden>
     <div class="ph-song">
@@ -1428,11 +1440,23 @@ function renderTime(){
 }
 // The timer's state is saved whenever it changes, so a reload picks up exactly where it was.
 var timerRestored = false;
-function saveTimer(){ if(!SYNC && timerRestored) store.set("fj-timer", {mode, running, endAt, remaining, cycle, at:Date.now()}); }
+// saved twice: localStorage (survives closing the browser) and sessionStorage (this tab; still works if localStorage is full)
+var storageWarned = false;
+function saveTimer(){
+  if(SYNC || !timerRestored) return;
+  const T = {mode, running, endAt, remaining, cycle, at:Date.now()};
+  try{ sessionStorage.setItem("fj-timer", JSON.stringify(T)); }catch(e){}
+  if(!store.set("fj-timer", T) && !storageWarned){
+    storageWarned = true;
+    setTimeout(() => gToast("⚠️ This browser's storage is full, so some settings may not save. Removing an uploaded background image in Customize frees the most space."), 500);
+  }
+}
 function restoreTimer(){
   timerRestored = true;
   if(SYNC) return false;
-  const T = store.get("fj-timer");
+  let T = store.get("fj-timer"), T2 = null;
+  try{ T2 = JSON.parse(sessionStorage.getItem("fj-timer")); }catch(e){}
+  if(T2 && (!T || (T2.at || 0) > (T.at || 0))) T = T2;   // whichever was saved last
   if(!T || !T.mode || Date.now() - (T.at || 0) > 8*3600*1000) return false;
   mode = ["focus","short","long"].includes(T.mode) ? T.mode : "focus";
   cycle = Math.max(0, Math.min(S.every - 1, T.cycle | 0));
@@ -1449,6 +1473,8 @@ function restoreTimer(){
   return true;
 }
 addEventListener("pagehide", () => saveTimer());
+addEventListener("beforeunload", () => saveTimer());
+document.addEventListener("visibilitychange", () => { if(document.hidden) saveTimer(); });
 function render(){
   saveTimer();
   if(typeof vizUpdate === "function") vizUpdate();
@@ -2689,6 +2715,7 @@ function phView(){
 var phShownMode = null;
 function phTick(){
   if(!phState) return;
+  if(!$("phCtl").hidden) phCtlRender();
   const v = phView();
   if(v.predicted){
     $("phLabel").textContent = v.label + (v.running ? "" : " · paused");
@@ -3433,6 +3460,16 @@ function groupMsg(m, conn){
       celebrate(`🎉 ${p.emoji} ${escH(p.name)} finished: ${escH(p.goal)}`); groupSound("sndGoal");
       break;
     case "away": setAway(p, !!m.away); break;
+    case "ctl": {   // timer controls from a phone the projector allowed
+      if(!canCtl(p.id)) break;
+      const a = m.a, who = `${p.emoji} ${escH(p.name)}`;
+      if(a === "toggle" || (a === "start" && !running) || (a === "pause" && running)){ unlockAudio(); $("go").click(); gToast(`🎛 ${who}: ${running ? "▶ started" : "⏸ paused"}`); }
+      else if(a === "skip"){ $("skip").click(); gToast(`🎛 ${who}: ⏭ skipped`); }
+      else if(a === "reset"){ $("reset").click(); gToast(`🎛 ${who}: ↺ reset`); }
+      else if(a === "mode" && ["focus","short","long"].includes(m.m)){ setMode(m.m); gToast(`🎛 ${who}: ${LABELS[m.m]}`); }
+      else if(a === "add" && running){ endAt += 60000; remaining += 60; render(); gToast(`🎛 ${who}: +1 minute`); }
+      break;
+    }
     case "brb":
       setBrb(p, !!m.on);
       gToast(m.on ? `☕ ${p.emoji} ${escH(p.name)} stepped out` : `👋 ${p.emoji} ${escH(p.name)} is back`);
@@ -3537,7 +3574,8 @@ function groupState(){
     night: night ? {id:night.id, m:Math.floor(night.focusMs/60000), s:night.sessions, gd:night.goalsDone, p:night.photos} : null,
     ppl, recap: lastRecap,
     av: arcView && arcView.key === S.archiveKey && S.archiveKey ? arcView.token : undefined,   // read-only archive for phones
-    out: out.length ? out : undefined};   // phones the big screen removed
+    out: out.length ? out : undefined,   // phones the big screen removed
+    ctl: night && night.ctl && night.ctl.length ? night.ctl.slice() : undefined};   // phones that may run the timer
 }
 // the relay only carries small messages, so trim the crew list (and recap) to fit
 function relayBody(){
@@ -3599,11 +3637,20 @@ function renderCrew(){
     const goal = p.brb ? `<div class="gl">☕ stepped out</div>` : !S.gGoals ? "" : p.goal ? `<div class="gl ${p.goalDone ? "done" : ""}">${p.goalDone ? "✅ " : "🎯 "}${escH(p.goal)}</div>` : `<div class="gl">no goal yet</div>`;
     const stat = S.gStats ? `<span class="mn">${minsTxt(p.focusMs)}${p.goalsDone ? ` · ✅${p.goalsDone}` : ""}</span>` : `<span class="mn">${p.goalsDone && S.gGoals ? "✅" + p.goalsDone : ""}</span>`;
     const down = S.gJail && p.down && !p.away ? ` <span title="Phone face down">🙃</span>` : "";
-    return `<div class="crew-row ${hereNow(p) ? "" : "off"}"><span class="em">${p.jailed ? "📵" : p.brb ? "☕" : p.emoji}</span><div style="min-width:0"><div class="nm">${escH(p.name)}${down}</div>${goal}</div>${stat}<button class="crew-x" data-kick="${escH(p.id)}" title="Remove ${escH(p.name)} from the room" aria-label="Remove ${escH(p.name)}">✕</button></div>`;
+    return `<div class="crew-row ${hereNow(p) ? "" : "off"}"><span class="em">${p.jailed ? "📵" : p.brb ? "☕" : p.emoji}</span><div style="min-width:0"><div class="nm">${escH(p.name)}${down}${canCtl(p.id) ? ` <span class="ctl-badge" title="Can control the timer">🎛</span>` : ""}</div>${goal}</div>${stat}<span class="crew-acts"><button class="crew-x crew-c${canCtl(p.id) ? " on" : ""}" data-ctl="${escH(p.id)}" title="${canCtl(p.id) ? "Take back timer controls" : "Let " + escH(p.name) + " control the timer from their phone"}">🎛</button><button class="crew-x" data-kick="${escH(p.id)}" title="Remove ${escH(p.name)} from the room" aria-label="Remove ${escH(p.name)}">✕</button></span></div>`;
   }).join("");
   // only touch the list when it changed, so buttons in it (like ✕) aren't replaced mid-click
   if($("crewList")._html !== crewHtml){ $("crewList").innerHTML = crewHtml; $("crewList")._html = crewHtml; }
   fitCrew();
+}
+// phones allowed to run the timer (saved with the night, so a refresh keeps them)
+function canCtl(id){ return !!(night && night.ctl && night.ctl.includes(id)); }
+function toggleCtl(id){
+  const p = people[id]; if(!p || !ensureNight()) return;
+  night.ctl = night.ctl || [];
+  if(canCtl(id)){ night.ctl = night.ctl.filter(x => x !== id); gToast(`🎛 ${p.emoji} ${escH(p.name)} can't control the timer anymore`); }
+  else { night.ctl.push(id); gToast(`🎛 ${p.emoji} ${escH(p.name)} can control the timer from their phone`); }
+  saveNight(true); renderCrew(); syncSoon(); relayPublish(true);
 }
 function kickPerson(id){
   const p = people[id]; if(!p) return;
@@ -3613,7 +3660,10 @@ function kickPerson(id){
   gToast(`${p.emoji} ${escH(p.name)} was removed`);
   saveNight(true); renderCrew(); syncSoon(); relayPublish(true);
 }
-$("crewList").addEventListener("click", e => { const b = e.target.closest("[data-kick]"); if(b) kickPerson(b.dataset.kick); });
+$("crewList").addEventListener("click", e => {
+  const b = e.target.closest("[data-kick]"); if(b) kickPerson(b.dataset.kick);
+  const c = e.target.closest("[data-ctl]"); if(c) toggleCtl(c.dataset.ctl);
+});
 // Try roomier layouts first, then denser ones, until the whole crew fits in the card.
 function fitCrew(){
   const el = $("crewList");
@@ -4182,6 +4232,23 @@ function phFlush(){
   phSendT = setTimeout(phFlush, 2500);
 }
 function phHello(){ if(me.name) phSend({t:"hello", name:me.name, emoji:me.emoji, away:document.hidden && !phBrb, brb:phBrb, rejoin:phRejoinAt ? true : undefined}); }
+/* ----- remote timer controls (only if the big screen allowed this phone) ----- */
+function phCtlRender(){
+  const on = !!(phG && phG.ctl && phG.ctl.includes(me.id));
+  $("phCtl").hidden = !on;
+  if(!on || !phState) return;
+  const v = phView();
+  $("phCtlGo").textContent = v.running ? "⏸ Pause" : "▶ Start";
+  document.querySelectorAll("#phCtlModes button").forEach(b => b.classList.toggle("on", b.dataset.pm === v.mode));
+}
+if(SYNC){
+  $("phCtl").addEventListener("click", e => {
+    const b = e.target.closest("[data-pc],[data-pm]"); if(!b) return;
+    if(b.dataset.pm) phSend({t:"ctl", a:"mode", m:b.dataset.pm});
+    else phSend({t:"ctl", a:b.dataset.pc});
+    b.disabled = true; setTimeout(() => b.disabled = false, 700);   // no accidental double taps
+  });
+}
 /* ----- stepping out (temporary) and leaving the room (for good) ----- */
 const phLeftKey = () => "fj-left-" + SYNC;
 var phBrb = SYNC ? !!store.get("fj-brb-" + SYNC) : false;
@@ -4220,6 +4287,7 @@ function phGroupRender(g){
   const mine = (g.ppl || []).find(p => p.id === me.id);
   $("phMeName").textContent = `${me.emoji} ${me.name}`;
   $("phBrbBox").hidden = !phBrb;
+  phCtlRender();
   $("phBrbBtn").hidden = phBrb;
   // goals
   $("phGoalBox").hidden = !g.f.goals;
