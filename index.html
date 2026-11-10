@@ -48,6 +48,46 @@
   #bgArt[hidden]{display:none}
   #bgArt i{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity 1.4s ease;will-change:opacity}
   #bgArt i.on{opacity:1}
+  /* ===== Vibes mode ===== */
+  #vibes{display:none}
+  body.vibes #vibes{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:calc(100vh - 110px);gap:1.5vh;padding-bottom:10vh}
+  body.vibes .grid{position:fixed;left:-400vw;top:0;width:1200px;visibility:hidden;pointer-events:none}   /* kept alive so the built-in player keeps playing */
+  body.vibes header .clock,body.vibes #count,body.vibes #nightBtn,body.vibes .vizconnect-wrap,body.vibes #vizBadge{display:none!important}
+  body.vibes header{justify-content:space-between}
+  body.vibes.idle .hdr-r,body.vibes.idle header .brand{opacity:0;pointer-events:none}
+  body.vibes.idle{cursor:none}
+  .v-clock{font:700 clamp(96px,21vw,400px)/.9 "Space Grotesk",system-ui,sans-serif;letter-spacing:-.04em;font-variant-numeric:tabular-nums;color:var(--ink);text-shadow:0 6px 40px rgba(0,0,0,.35)}
+  .v-clock small{font-size:.22em;letter-spacing:0;margin-left:.15em;opacity:.7;font-weight:600}
+  .v-date{font-size:clamp(18px,2.4vw,40px);opacity:.8;margin-top:-.5vh}
+  .v-np{display:flex;align-items:center;gap:2.2vw;margin-top:5vh;max-width:min(1100px,88vw);text-align:left;background:color-mix(in srgb,var(--bg) 45%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:24px;padding:1.6vw 2.4vw 1.6vw 1.6vw}
+  .v-np[hidden]{display:none}
+  .v-np img{width:clamp(90px,13vw,220px);height:clamp(90px,13vw,220px);border-radius:14px;object-fit:cover;box-shadow:0 10px 40px rgba(0,0,0,.4);flex:none}
+  .v-np-t{min-width:0;flex:1}
+  .v-kicker{font-size:clamp(11px,1vw,16px);letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  .v-title{font-size:clamp(24px,3.4vw,60px);font-weight:700;line-height:1.1;margin-top:.4vh;overflow-wrap:anywhere}
+  .v-artist{font-size:clamp(16px,1.9vw,32px);opacity:.75;margin-top:.4vh}
+  .v-bar{height:6px;border-radius:3px;background:color-mix(in srgb,var(--ink) 18%,transparent);margin-top:1.8vh;overflow:hidden}
+  .v-bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .5s linear}
+  .v-times{display:flex;justify-content:space-between;font:500 clamp(11px,.9vw,15px) ui-monospace,monospace;opacity:.6;margin-top:.6vh}
+  .v-recent{display:flex;gap:1.6vw;justify-content:center;flex-wrap:wrap;margin-top:2.5vh;max-width:88vw;opacity:.8}
+  .v-recent[hidden]{display:none}
+  .v-recent > div{display:flex;align-items:center;gap:10px;font-size:clamp(12px,1vw,17px);text-align:left;max-width:22vw}
+  .v-recent img{width:clamp(30px,2.6vw,48px);height:clamp(30px,2.6vw,48px);border-radius:6px;object-fit:cover;flex:none}
+  .v-recent b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .v-recent span{opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .v-recent .lbl{font-size:clamp(10px,.8vw,13px);letter-spacing:.16em;text-transform:uppercase;opacity:.6;align-self:center}
+  .v-photo{position:fixed;right:3vw;bottom:5vh;width:clamp(160px,19vw,360px);aspect-ratio:4/3;border-radius:14px;overflow:hidden;box-shadow:0 14px 50px rgba(0,0,0,.5);transform:rotate(2.5deg);border:6px solid #fff;background:#fff;z-index:2}
+  .v-photo[hidden]{display:none}
+  .v-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.6s ease}
+  .v-photo img.on{opacity:1}
+  #vViz{position:fixed;left:0;right:0;bottom:0;width:100vw;height:34vh;pointer-events:none;z-index:0;display:none}
+  body.vibes.vviz #vViz{display:block}
+  @keyframes vdrift{0%{transform:scale(1) translate(0,0)}33%{transform:scale(1.08) translate(-2%,1.5%)}66%{transform:scale(1.05) translate(2%,-1%)}100%{transform:scale(1.1) translate(-1%,-2%)}}
+  body.vibes.vdrift #bgArt,body.vibes.vdrift #bg{animation:vdrift 70s ease-in-out infinite alternate}
+  @media (prefers-reduced-motion:reduce){body.vibes.vdrift #bgArt,body.vibes.vdrift #bg{animation:none}}
+  /* phones while the big screen is in Vibes mode */
+  #phVibes{display:none;text-align:center}
+  body.phvibes #phVibes{display:block} body.phvibes #phTimerCard{display:none}
+  #phVibes .v-clock{font-size:clamp(72px,24vw,130px)} #phVibes .v-date{font-size:16px;margin-top:4px}
   #bg.drift{background-size:400% 400% !important;animation:drift 28s ease infinite}
   @keyframes drift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
   a{color:var(--accent)}
@@ -486,7 +526,7 @@
 </style>
 </head>
 <body>
-<div id="bg"></div><div id="bgArt" hidden><i></i><i></i></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><div class="vizconnect-wrap"><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button></div>
+<div id="bg"></div><div id="bgArt" hidden><i></i><i></i></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><canvas id="vViz"></canvas><div class="v-photo" id="vPhoto" hidden><img alt=""><img alt=""></div><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><div class="vizconnect-wrap"><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button></div>
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
@@ -494,6 +534,7 @@
     <div class="hdr-r">
       <div class="count" id="count">0 focus sessions today</div>
       <button class="ghost sm" id="nightBtn" hidden title="End tonight and show the recap">🏁 End night</button>
+      <button class="ghost sm" id="vibesBtn" title="Vibes mode: big clock and music, no timer (B)">🌙 Vibes</button>
       <button class="ghost sm" id="stageBtn" title="Projector mode (F)">📽 Projector</button>
       <button class="ghost sm" id="jamOpen">📱 Jam QR</button>
       <button class="ghost sm" id="guideBtn" title="Setup guide" aria-label="Setup guide">🧭</button>
@@ -502,6 +543,21 @@
     </div>
   </header>
 
+  <div id="vibes">
+    <div class="v-clock" id="vClock">--:--</div>
+    <div class="v-date" id="vDate"></div>
+    <div class="v-np" id="vNp" hidden>
+      <img id="vArt" alt="">
+      <div class="v-np-t">
+        <div class="v-kicker" id="vKicker">Now playing</div>
+        <div class="v-title" id="vTitle"></div>
+        <div class="v-artist" id="vArtist"></div>
+        <div class="v-bar"><i id="vBar"></i></div>
+        <div class="v-times"><span id="vCur"></span><span id="vDur"></span></div>
+      </div>
+    </div>
+    <div class="v-recent" id="vRecent" hidden></div>
+  </div>
   <div class="grid">
     <!-- TIMER -->
     <section class="card timer-card">
@@ -728,7 +784,8 @@
 <!-- PHONE VIEW -->
 <div id="phone" hidden>
   <div class="ph-top"><div class="brand"><span class="dot"></span>Focus Jams</div><div class="ph-status"><span class="live" id="phLive"></span><span id="phStatus">Connecting…</span></div></div>
-  <div class="card">
+  <div class="card" id="phVibes"><div class="v-clock" id="phVClock">--:--</div><div class="v-date" id="phVDate"></div><div class="hint" style="margin-top:8px">🌙 Vibes mode: no timer right now</div></div>
+  <div class="card" id="phTimerCard">
     <div class="ringbox">
       <svg viewBox="0 0 260 260">
         <circle class="track" cx="130" cy="130" r="118" fill="none" stroke-width="10"/>
@@ -1151,6 +1208,14 @@
     <label class="ghost sm">Upload your own image<input type="file" id="imgfile" accept="image/*" hidden></label>
     <span class="hint" id="imgMsg"></span>
 
+    <h3>🌙 Vibes mode</h3>
+    <p class="hint" style="margin-top:0">A big clock and the music, no timer. For hanging out. Turn it on with <b>🌙 Vibes</b> at the top (or press B). Pick a background while in Vibes mode to give it its own.</p>
+    <div class="toggles">
+      <label><input type="checkbox" id="s-vibesDrift"> Slowly drift the background</label>
+      <label><input type="checkbox" id="s-vibesViz"> Calm visualizer</label>
+      <label><input type="checkbox" id="s-vibesPhotos"> Photo slideshow (tonight's album, or recent ones)</label>
+      <label><input type="checkbox" id="s-vibesRecent"> Recently played songs</label>
+    </div>
     <div class="sliders">
       <label>Darken background <input type="range" id="s-dim" min="0" max="80"></label>
       <label>Blur background <input type="range" id="s-blur" min="0" max="20"></label>
@@ -1253,7 +1318,8 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
              theme:"tomato", customAccent:null, customBg:null, modeColors:true,
-             bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60};
+             bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60,
+             vibes:false, vibesBg:"art", vibesDrift:true, vibesViz:true, vibesPhotos:true, vibesRecent:true};
 
 const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
@@ -1291,7 +1357,7 @@ function colors(m = mode){
   const ink = S.customBg ? (lum(bg) > .3 ? "#1d1a17" : "#f6f2ee") : t.ink;
   let accent = S.customAccent || t.acc[S.modeColors ? MODE_IDX[m] : 0];
   // album-art background: the ring, "now playing" and progress bar take the cover's color
-  if(S.bg === "art" && !S.customAccent && typeof artAccent !== "undefined" && artAccent) accent = artAccent[S.modeColors ? MODE_IDX[m] % artAccent.length : 0];
+  if(curBg() === "art" && !S.customAccent && typeof artAccent !== "undefined" && artAccent) accent = artAccent[S.modeColors ? MODE_IDX[m] % artAccent.length : 0];
   return {bg, ink, accent, accentInk: lum(accent) > .4 ? "#141414" : "#ffffff"};
 }
 
@@ -1368,7 +1434,9 @@ const BGS = {
 };
 // the cover of what's playing (on phones: what the big screen says is playing)
 function artNow(){ const t = SYNC ? (typeof phState !== "undefined" && phState && phState.song) : curTrack; return (t && t.art) || ""; }
-function customImgSrc(){ return S.bg === "upload" ? uploadedImg : S.bg === "url" ? S.imgUrl : null; }
+function customImgSrc(){ const b = curBg(); return b === "upload" ? uploadedImg : b === "url" ? S.imgUrl : null; }
+// the background in use: Vibes mode has its own (blurred album art unless changed while in Vibes)
+function curBg(){ return S.vibes && !SYNC && S.vibesBg ? S.vibesBg : S.bg; }
 function bgCss(key, c){
   if(key === "upload" || key === "url"){
     const src = key === "upload" ? uploadedImg : S.imgUrl;
@@ -1383,9 +1451,9 @@ function applyLook(){
   r.setProperty("--accent", c.accent); r.setProperty("--accent-ink", c.accentInk);
   r.setProperty("--glass", (100 - S.glass) + "%");
   r.colorScheme = lum(c.bg) > .3 ? "light" : "dark";
-  const bg = $("bg"), art = S.bg === "art";
-  bg.style.background = art ? `radial-gradient(circle at 30% 30%, ${rgba(c.accent,.35)}, transparent 60%), ${c.bg}` : bgCss(S.bg, c);
-  bg.classList.toggle("drift", S.bg === "drift");
+  const bgKey = curBg(), bg = $("bg"), art = bgKey === "art";
+  bg.style.background = art ? `radial-gradient(circle at 30% 30%, ${rgba(c.accent,.35)}, transparent 60%), ${c.bg}` : bgCss(bgKey, c);
+  bg.classList.toggle("drift", bgKey === "drift");
   bg.style.filter = !art && S.blur ? `blur(${S.blur}px)` : "";
   bg.style.transform = !art && S.blur ? "scale(1.08)" : "";
   $("bgArt").hidden = !art;
@@ -1421,7 +1489,7 @@ function artAccentLoad(url){
 // album-art background: two layers that cross-fade when the song changes
 var artShown = null, artLayer = 0;
 function artBgUpdate(){
-  if(S.bg !== "art") return;
+  if(curBg() !== "art") return;
   const box = $("bgArt"), L = box.children, url = artNow();
   const blur = Math.max(0, +S.artBlur || 0);
   const css = `blur(${blur}px) saturate(1.25)`, scale = `scale(${1 + Math.min(.5, blur / 200 + .04)})`;   // grow a bit so blurred edges stay off-screen
@@ -1447,13 +1515,14 @@ function renderLookUI(){
   const keys = Object.keys(BGS).concat(S.imgUrl ? ["url"] : [], uploadedImg ? ["upload"] : []);
   $("bgs").innerHTML = keys.map(k => {
     const name = k === "url" ? "Your link" : k === "upload" ? "Your upload" : BGS[k].name;
-    return `<div class="bgt ${k===S.bg?"on":""}" data-bg="${k}" style='background:${bgCss(k,c).replace(/'/g,"&#39;")}'><span>${name}</span></div>`;
+    return `<div class="bgt ${k===curBg()?"on":""}" data-bg="${k}" style='background:${bgCss(k,c).replace(/'/g,"&#39;")}'><span>${name}</span></div>`;
   }).join("");
   $("c-accent").value = colors().accent;
   $("c-bg").value = c.bg;
   $("s-modeColors").checked = S.modeColors;
+  ["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).checked = !!S[k]);
   $("s-dim").value = S.dim; $("s-blur").value = S.blur; $("s-glass").value = S.glass; $("s-artBlur").value = S.artBlur;
-  $("artBlurRow").hidden = S.bg !== "art"; $("s-blur").closest("label").hidden = S.bg === "art";
+  $("artBlurRow").hidden = curBg() !== "art"; $("s-blur").closest("label").hidden = curBg() === "art";
 }
 
 /* ================= timer ================= */
@@ -1772,7 +1841,7 @@ function plName(uri){
   if(S.customNames[uri]) return S.customNames[uri];
   return uri.startsWith("spotify:album:") ? "Your album" : "Your playlist";
 }
-function syncMusic(){ S.src === "app" ? syncApp() : syncEmbed(); }
+function syncMusic(){ if(S.vibes && !SYNC) return; S.src === "app" ? syncApp() : syncEmbed(); }   // Vibes mode: the timer leaves the music alone
 
 /* ---------- built-in Spotify embed ---------- */
 let controller = null, musicPaused = true, everPlayed = false, loadedUri = null;
@@ -1830,6 +1899,7 @@ window.onSpotifyIframeApiReady = (IFrameAPI) => {
       if(!e.data.isPaused) everPlayed = true;
       setMusicState(e.data.isPaused ? (running && !wantMusic() ? "Paused for your break" : "Paused") : "Playing", !e.data.isPaused);
       if(e.data.playingURI) embedTrack(e.data.playingURI);
+      if(typeof e.data.position === "number") embedProg = {pos:e.data.position, dur:e.data.duration || 0, at:Date.now(), playing:!e.data.isPaused};
       syncSoon();
       if(S.src === "embed") renderMini(!e.data.isPaused && curTrack && curTrack.name ? `♪ ${curTrack.name}${curTrack.artist ? " — " + curTrack.artist : ""}` : null);
     });
@@ -2285,7 +2355,8 @@ renderPlUI();
 /* lyrics */
 function updateLyrBtns(){
   syncSoon();
-  if(S.bg === "art") artBgUpdate();
+  if(curBg() === "art") artBgUpdate();
+  noteTrack();
   // (only once the page has finished starting up: the visualizer's color code is set up further down)
   if(window.FJ_READY && S.vizColors === "album") try{ renderVizSwatches(); }catch(e){ console.error(e); }
   const ok = !!(curTrack && curTrack.uri && /^spotify:track:/.test(curTrack.uri));
@@ -2340,6 +2411,128 @@ function toggleStage(){
 $("stageBtn").onclick = toggleStage;
 ["mousemove","mousedown","keydown","touchstart"].forEach(ev => document.addEventListener(ev, wake, {passive:true}));
 applyStage();
+
+
+/* ================= Vibes mode: big clock + music, no timer ================= */
+var recentTracks = [], embedProg = null, vibesT = null, vPhotos = [], vPhotoI = 0, vPhotoT = null, vPhotoAt = 0, vVizRaf = 0;
+function clockHtml(d, small){
+  let h = d.getHours(), ampm = "";
+  if(!S.clock24){ ampm = h < 12 ? "AM" : "PM"; h = h % 12 || 12; }
+  return `${S.clock24 ? String(h).padStart(2,"0") : h}:${String(d.getMinutes()).padStart(2,"0")}${ampm && small ? `<small>${ampm}</small>` : ""}`;
+}
+function setVibes(on){
+  if(on && running){ running = false; stopTick(); remaining = Math.max(0, (endAt - Date.now())/1000); cancelSound(); render(); }   // timer waits; music keeps playing
+  S.vibes = on; save(); applyVibes(); applyLook(); renderLookUI(); syncSoon(); relayPublish(true);
+}
+function applyVibes(){
+  const on = !!S.vibes && !SYNC;
+  document.body.classList.toggle("vibes", on);
+  document.body.classList.toggle("vdrift", on && S.vibesDrift);
+  document.body.classList.toggle("vviz", on && S.vibesViz);
+  $("vibesBtn").textContent = on ? "⏱ Timer" : "🌙 Vibes";
+  $("vibesBtn").title = on ? "Back to the timer (B)" : "Vibes mode: big clock and music, no timer (B)";
+  clearInterval(vibesT); vibesT = null; cancelAnimationFrame(vVizRaf); vVizRaf = 0;
+  if(!on){ $("vPhoto").hidden = true; clearInterval(vPhotoT); vPhotoT = null; return; }
+  vibesTick(); vibesT = setInterval(vibesTick, 500);
+  vibesRecent();
+  vPhotoAt = 0; vibesPhotos();
+  if(S.vibesViz) vVizRaf = requestAnimationFrame(vibesViz);
+  wake();
+}
+function vibesTick(){
+  const d = new Date();
+  $("vClock").innerHTML = clockHtml(d, true);
+  $("vDate").textContent = d.toLocaleDateString(undefined, {weekday:"long", month:"long", day:"numeric"});
+  // now playing: your Spotify app (np) or the built-in player (embedProg)
+  const t = curTrack;
+  $("vNp").hidden = !(t && t.name);
+  if(t && t.name){
+    if($("vTitle").textContent !== t.name) $("vTitle").textContent = t.name;
+    $("vArtist").textContent = t.artist || ""; $("vArtist").hidden = !t.artist;
+    if(t.art && $("vArt").getAttribute("src") !== t.art) $("vArt").src = t.art;
+    $("vArt").hidden = !t.art;
+    let cur = 0, dur = 0, playing = false;
+    if(S.src === "app" && np && np.has){ dur = np.dur; playing = np.playing; cur = Math.min(dur, np.prog + (playing ? Date.now() - np.at : 0)); }
+    else if(embedProg){ dur = embedProg.dur; playing = embedProg.playing; cur = Math.min(dur, embedProg.pos + (playing ? Date.now() - embedProg.at : 0)); }
+    $("vKicker").textContent = playing ? "Now playing" : "Paused";
+    $("vBar").style.width = dur ? (cur/dur*100) + "%" : "0";
+    $("vCur").textContent = dur ? mmss(cur) : ""; $("vDur").textContent = dur ? mmss(dur) : "";
+  }
+  if(S.vibesPhotos && Date.now() - vPhotoAt > 60000) vibesPhotos();
+}
+// songs that played before this one
+function noteTrack(){
+  const t = curTrack;
+  if(!t || !t.name) return;
+  if(recentTracks[0] && recentTracks[0].uri === t.uri){ recentTracks[0] = Object.assign({}, t); }
+  else recentTracks.unshift(Object.assign({}, t));
+  recentTracks = recentTracks.slice(0, 6);
+  if(S.vibes) vibesRecent();
+}
+function vibesRecent(){
+  const list = recentTracks.slice(1, 5);
+  $("vRecent").hidden = !S.vibesRecent || !list.length;
+  $("vRecent").innerHTML = list.length ? `<span class="lbl">Earlier</span>` + list.map(t => `<div>${t.art ? `<img src="${escH(t.art)}" alt="">` : ""}<div style="min-width:0"><b>${escH(t.name)}</b>${t.artist ? `<span>${escH(t.artist)}</span>` : ""}</div></div>`).join("") : "";
+}
+// photo slideshow: tonight's album, or the most recent photos on this computer
+async function vibesPhotos(){
+  vPhotoAt = Date.now();
+  if(!S.vibes || !S.vibesPhotos){ $("vPhoto").hidden = true; clearInterval(vPhotoT); vPhotoT = null; return; }
+  let list = [];
+  try{
+    if(night) list = await nightPhotos(night.id);
+    if(!list.length) list = ((await idbDo("readonly", st => st.getAll(), "photos")) || []).sort((a,b) => b.ts - a.ts).slice(0, 40);
+  }catch(e){}
+  list = list.filter(p => p.blob);
+  const ids = list.map(p => p.id).join();
+  if(ids === vPhotos.map(p => p.id).join()) return;
+  vPhotos.forEach(p => URL.revokeObjectURL(p.url));
+  vPhotos = list.map(p => ({id:p.id, url:URL.createObjectURL(p.blob)}));
+  $("vPhoto").hidden = !vPhotos.length;
+  clearInterval(vPhotoT); vPhotoT = null;
+  if(!vPhotos.length) return;
+  vPhotoI = 0; vibesPhotoNext();
+  if(vPhotos.length > 1) vPhotoT = setInterval(vibesPhotoNext, 9000);
+}
+function vibesPhotoNext(){
+  if(!vPhotos.length) return;
+  const imgs = $("vPhoto").querySelectorAll("img"), on = $("vPhoto").querySelector("img.on"), nxt = on === imgs[0] ? imgs[1] : imgs[0];
+  const p = vPhotos[vPhotoI++ % vPhotos.length];
+  nxt.onload = () => { nxt.classList.add("on"); if(on && on !== nxt) on.classList.remove("on"); };
+  nxt.src = p.url;
+}
+// calm visualizer: soft waves along the bottom; they follow the music if computer sound is connected
+function vibesViz(ts){
+  if(!S.vibes || !S.vibesViz){ vVizRaf = 0; return; }
+  const cv = $("vViz"), dpr = Math.min(2, devicePixelRatio || 1);
+  const W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
+  if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+  const x = cv.getContext("2d"); x.clearRect(0, 0, W, H);
+  let level = .25 + .08 * Math.sin(ts / 2300);
+  try{
+    if(typeof vizAnalyser !== "undefined" && vizAnalyser){
+      const a = new Uint8Array(vizAnalyser.frequencyBinCount); vizAnalyser.getByteFrequencyData(a);
+      let sum = 0; for(let i = 2; i < 64; i++) sum += a[i];
+      level = Math.min(1, .15 + (sum / 62 / 255) * 1.4);
+    }
+  }catch(e){}
+  vibesViz.lv = (vibesViz.lv || level) * .92 + level * .08;   // smooth, never jumpy
+  const acc = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#ff5a4e";
+  for(let k = 0; k < 3; k++){
+    const amp = H * (.12 + .1 * k) * vibesViz.lv, base = H * (.55 + .14 * k), sp = 1 / (5200 + k * 1700), wl = W / (1.3 + k * .45);
+    x.beginPath(); x.moveTo(0, H);
+    for(let px = 0; px <= W; px += 8 * dpr){
+      const y = base - amp * Math.sin(px / wl * Math.PI * 2 + ts * sp * 6.28 + k * 1.7) - amp * .35 * Math.sin(px / (wl * .37) * 6.28 - ts * sp * 9 + k);
+      x.lineTo(px, y);
+    }
+    x.lineTo(W, H); x.closePath();
+    x.globalAlpha = .16 + k * .06; x.fillStyle = acc; x.fill();
+  }
+  x.globalAlpha = 1;
+  vVizRaf = requestAnimationFrame(vibesViz);
+}
+$("vibesBtn").onclick = e => { setVibes(!S.vibes); e.currentTarget.blur(); };   // (blur: so Space doesn't press it again)
+["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); applyVibes(); });
 
 /* clock */
 function renderClock(){
@@ -2402,7 +2595,8 @@ $("themes").onclick = e => {
 };
 $("bgs").onclick = e => {
   const t = e.target.closest(".bgt"); if(!t) return;
-  S.bg = t.dataset.bg; save(); applyLook(); renderLookUI();
+  if(S.vibes) S.vibesBg = t.dataset.bg; else S.bg = t.dataset.bg;
+  save(); applyLook(); renderLookUI();
 };
 $("c-accent").oninput = e => { S.customAccent = e.target.value; applyLook(); };
 $("c-bg").oninput = e => { S.customBg = e.target.value; applyLook(); };
@@ -2452,6 +2646,8 @@ document.addEventListener("keydown", e => {
     return;
   }
   if(e.target.matches("input,select") || document.querySelector("dialog[open]")) return;
+  if(e.key === "b" || e.key === "B"){ setVibes(!S.vibes); return; }
+  if(S.vibes){ if(e.key === "f" || e.key === "F") toggleStage(); return; }   // no timer keys in Vibes mode
   if(e.code === "Space"){ e.preventDefault(); $("go").click(); }
   else if(e.key === "r" || e.key === "R") $("reset").click();
   else if(e.key === "s" || e.key === "S") $("skip").click();
@@ -2522,6 +2718,7 @@ function syncState(){
     playing, jam:S.jamLink, t:Date.now(), endEpoch: running ? endAt : 0,
     endMsg: S.endMsgOn ? {seq:endMsgSeq, text:S.endMsg, secs:S.endMsgSecs} : null,
     g: groupState(),
+    vibes: S.vibes ? 1 : undefined,
     auto:S.auto, durs:{focus:S.focus*60000, short:S.short*60000, long:S.long*60000}};
 }
 function broadcast(){
@@ -2697,6 +2894,7 @@ function phApply(st, via){
   if(st.endMsg && phLastMode !== null && st.endMsg.seq !== phMsgSeq && st.endMsg.seq > 0) showEndMsg(st.endMsg.text, Math.min(+st.endMsg.secs || 10, 10));
   if(st.endMsg) phMsgSeq = st.endMsg.seq;
   phLastMode = st.mode; phState = st;
+  document.body.classList.toggle("phvibes", !!st.vibes);
   // direct updates arrive instantly, so count down from "now"; relay updates may be older, so use the absolute end time
   phEnd = via === "relay" && st.running && st.endEpoch ? st.endEpoch : Date.now() + st.remaining;
   const r = document.documentElement.style, c = st.colors;
@@ -2743,6 +2941,7 @@ function phView(){
 var phShownMode = null;
 function phTick(){
   if(!phState) return;
+  if(phState.vibes){ const d = new Date(); $("phVClock").innerHTML = clockHtml(d, true); $("phVDate").textContent = d.toLocaleDateString(undefined, {weekday:"long", month:"short", day:"numeric"}); }
   if(!$("phCtl").hidden) phCtlRender();
   const v = phView();
   if(v.predicted){
@@ -4262,7 +4461,7 @@ function phFlush(){
 function phHello(){ if(me.name) phSend({t:"hello", name:me.name, emoji:me.emoji, away:document.hidden && !phBrb, brb:phBrb, rejoin:phRejoinAt ? true : undefined}); }
 /* ----- remote timer controls (only if the big screen allowed this phone) ----- */
 function phCtlRender(){
-  const on = !!(phG && phG.ctl && phG.ctl.includes(me.id));
+  const on = !!(phG && phG.ctl && phG.ctl.includes(me.id)) && !(phState && phState.vibes);
   $("phCtl").hidden = !on;
   if(!on || !phState) return;
   const v = phView();
@@ -5082,10 +5281,11 @@ $("nightDlg").addEventListener("close", ndSave);
   if(ARCV) return startArcView();
   if(SYNC) return startPhone();
   const resume = restoreTimer();
+  applyVibes();
   startHost();
   renderChips();
   render();
-  if(resume) start();   // it was running before the reload: keep going
+  if(resume && !S.vibes) start();   // it was running before the reload: keep going
   await handleRedirect();
   setSource(S.src);
   suMaybeStart();
