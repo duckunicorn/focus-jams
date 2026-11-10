@@ -44,6 +44,10 @@
   body.viz.needsound .vizconnect{display:block}
   body.viz.needsound.idle .vizconnect{display:block;opacity:1;cursor:pointer}
   #dim{z-index:-1;background:#000;pointer-events:none}
+  #bgArt{position:fixed;inset:0;z-index:-2;overflow:hidden;pointer-events:none}
+  #bgArt[hidden]{display:none}
+  #bgArt i{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity 1.4s ease;will-change:opacity}
+  #bgArt i.on{opacity:1}
   #bg.drift{background-size:400% 400% !important;animation:drift 28s ease infinite}
   @keyframes drift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
   a{color:var(--accent)}
@@ -476,7 +480,7 @@
 </style>
 </head>
 <body>
-<div id="bg"></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><div class="vizconnect-wrap"><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button></div>
+<div id="bg"></div><div id="bgArt" hidden><i></i><i></i></div><div id="dim"></div><div class="endmsg" id="endMsgBox" role="alert"><div><div class="endmsg-t" id="endMsgT"></div><div class="endmsg-s" id="endMsgS"></div></div></div><canvas id="viz"></canvas><div class="viztoast" id="vizToast"></div><div class="vizbadge" id="vizBadge">☕ Break time</div><div class="vizconnect-wrap"><button class="big sm vizconnect" id="vizConnect">🔊 Click to connect the computer's sound</button></div>
 <div class="wrap">
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
@@ -1138,6 +1142,7 @@
     <div class="sliders">
       <label>Darken background <input type="range" id="s-dim" min="0" max="80"></label>
       <label>Blur background <input type="range" id="s-blur" min="0" max="20"></label>
+      <label id="artBlurRow" hidden>Blur album art <input type="range" id="s-artBlur" min="0" max="150"></label>
       <label>See-through cards <input type="range" id="s-glass" min="0" max="60"></label>
     </div>
     </div>
@@ -1236,7 +1241,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
              theme:"tomato", customAccent:null, customBg:null, modeColors:true,
-             bg:"glow", dim:0, blur:0, glass:16, imgUrl:""};
+             bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60};
 
 const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
@@ -1345,7 +1350,10 @@ const BGS = {
   peach:     {name:"Peach",     css:()=>"linear-gradient(135deg,#ffd1b3 0%,#ff9a8b 50%,#ff6a88 100%)"},
   stars:     {name:"Night sky", css:starsCss},
   synthwave: {name:"Synthwave", css:synthCss},
+  art:       {name:"Album art ♪", css:c=>{ const a = artNow(); return a ? `url("${a.replace(/"/g,"%22")}") center/cover no-repeat, ${c.bg}` : `radial-gradient(circle at 30% 30%, ${rgba(c.accent,.5)}, transparent 60%), ${c.bg}`; }},
 };
+// the cover of what's playing (on phones: what the big screen says is playing)
+function artNow(){ const t = SYNC ? (typeof phState !== "undefined" && phState && phState.song) : curTrack; return (t && t.art) || ""; }
 function customImgSrc(){ return S.bg === "upload" ? uploadedImg : S.bg === "url" ? S.imgUrl : null; }
 function bgCss(key, c){
   if(key === "upload" || key === "url"){
@@ -1361,13 +1369,35 @@ function applyLook(){
   r.setProperty("--accent", c.accent); r.setProperty("--accent-ink", c.accentInk);
   r.setProperty("--glass", (100 - S.glass) + "%");
   r.colorScheme = lum(c.bg) > .3 ? "light" : "dark";
-  const bg = $("bg");
-  bg.style.background = bgCss(S.bg, c);
+  const bg = $("bg"), art = S.bg === "art";
+  bg.style.background = art ? `radial-gradient(circle at 30% 30%, ${rgba(c.accent,.35)}, transparent 60%), ${c.bg}` : bgCss(S.bg, c);
   bg.classList.toggle("drift", S.bg === "drift");
-  bg.style.filter = S.blur ? `blur(${S.blur}px)` : "";
-  bg.style.transform = S.blur ? "scale(1.08)" : "";
+  bg.style.filter = !art && S.blur ? `blur(${S.blur}px)` : "";
+  bg.style.transform = !art && S.blur ? "scale(1.08)" : "";
+  $("bgArt").hidden = !art;
+  if(art) artBgUpdate();
   $("dim").style.opacity = S.dim / 100;
   syncSoon();
+}
+// album-art background: two layers that cross-fade when the song changes
+var artShown = null, artLayer = 0;
+function artBgUpdate(){
+  if(S.bg !== "art") return;
+  const box = $("bgArt"), L = box.children, url = artNow();
+  const blur = Math.max(0, +S.artBlur || 0);
+  const css = `blur(${blur}px) saturate(1.25)`, scale = `scale(${1 + Math.min(.5, blur / 200 + .04)})`;   // grow a bit so blurred edges stay off-screen
+  for(const el of L){ el.style.filter = css; el.style.transform = scale; }
+  if(url === artShown) return;
+  artShown = url;
+  if(!url){ for(const el of L) el.classList.remove("on"); return; }
+  const img = new Image();
+  img.onload = () => {
+    if(artShown !== url) return;
+    artLayer = 1 - artLayer;
+    L[artLayer].style.backgroundImage = `url("${url.replace(/"/g,"%22")}")`;
+    L[artLayer].classList.add("on"); L[1 - artLayer].classList.remove("on");
+  };
+  img.src = url;
 }
 function renderLookUI(){
   $("themes").innerHTML = Object.entries(THEMES).map(([k,t]) =>
@@ -1382,7 +1412,8 @@ function renderLookUI(){
   $("c-accent").value = colors().accent;
   $("c-bg").value = c.bg;
   $("s-modeColors").checked = S.modeColors;
-  $("s-dim").value = S.dim; $("s-blur").value = S.blur; $("s-glass").value = S.glass;
+  $("s-dim").value = S.dim; $("s-blur").value = S.blur; $("s-glass").value = S.glass; $("s-artBlur").value = S.artBlur;
+  $("artBlurRow").hidden = S.bg !== "art"; $("s-blur").closest("label").hidden = S.bg === "art";
 }
 
 /* ================= timer ================= */
@@ -2200,6 +2231,7 @@ renderPlUI();
 /* lyrics */
 function updateLyrBtns(){
   syncSoon();
+  if(S.bg === "art") artBgUpdate();
   // (only once the page has finished starting up: the visualizer's color code is set up further down)
   if(window.FJ_READY && S.vizColors === "album") try{ renderVizSwatches(); }catch(e){ console.error(e); }
   const ok = !!(curTrack && curTrack.uri && /^spotify:track:/.test(curTrack.uri));
@@ -2323,7 +2355,7 @@ $("c-bg").oninput = e => { S.customBg = e.target.value; applyLook(); };
 $("c-accent").onchange = $("c-bg").onchange = () => { save(); renderLookUI(); };
 $("c-reset").onclick = () => { S.customAccent = null; S.customBg = null; save(); applyLook(); renderLookUI(); };
 $("s-modeColors").onchange = e => { S.modeColors = e.target.checked; save(); applyLook(); };
-[["s-dim","dim"],["s-blur","blur"],["s-glass","glass"]].forEach(([id,k]) => {
+[["s-dim","dim"],["s-blur","blur"],["s-glass","glass"],["s-artBlur","artBlur"]].forEach(([id,k]) => {
   $(id).oninput = e => { S[k] = +e.target.value; applyLook(); };
   $(id).onchange = save;
 });
