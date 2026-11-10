@@ -43,7 +43,7 @@
   .vizconnect{display:none;width:max-content;max-width:90vw;box-shadow:0 10px 40px -8px var(--accent),0 0 0 4px rgba(0,0,0,.35) !important;font-size:clamp(15px,1.3vw,24px) !important;padding:.9em 1.4em !important}
   body.viz.needsound .vizconnect{display:block}
   body.viz.needsound.idle .vizconnect{display:block;opacity:1;cursor:pointer}
-  #dim{z-index:-1;background:#000;pointer-events:none}
+  #dim{z-index:-1;background:#000;pointer-events:none;transition:opacity 1.4s ease}
   #bgArt{position:fixed;inset:0;z-index:-2;overflow:hidden;pointer-events:none}
   #bgArt[hidden]{display:none}
   #bgArt i{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity 1.4s ease;will-change:opacity}
@@ -1216,10 +1216,14 @@
       <label><input type="checkbox" id="s-vibesPhotos"> Photo slideshow (tonight's album, or recent ones)</label>
       <label><input type="checkbox" id="s-vibesRecent"> Recently played songs</label>
     </div>
+    <div class="toggles" id="artAutoRow" hidden style="margin-top:10px">
+      <label><input type="checkbox" id="s-artAuto"> Keep the album-art background at a steady brightness (darkens bright covers, brightens dark ones)</label>
+    </div>
     <div class="sliders">
       <label>Darken background <input type="range" id="s-dim" min="0" max="80"></label>
       <label>Blur background <input type="range" id="s-blur" min="0" max="20"></label>
       <label id="artBlurRow" hidden>Blur album art <input type="range" id="s-artBlur" min="0" max="150"></label>
+      <label id="artTargetRow" hidden>Album art brightness <input type="range" id="s-artTarget" min="8" max="60"></label>
       <label>See-through cards <input type="range" id="s-glass" min="0" max="60"></label>
     </div>
     </div>
@@ -1318,7 +1322,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              sync:true, breakmusic:false, uri:PRESETS[0].uri,
              src:"embed", clientId:DEFAULT_CLIENT_ID, appsync:false,
              theme:"tomato", customAccent:null, customBg:null, modeColors:true,
-             bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60,
+             bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60, artAuto:true, artTarget:30,
              vibes:false, vibesBg:"art", vibesDrift:true, vibesViz:true, vibesPhotos:true, vibesRecent:true};
 
 const store = {
@@ -1331,6 +1335,7 @@ const ARCV = (new URLSearchParams(location.search).get("archive") || "").toLower
 const SAVED = store.get("fj-settings") || {};
 const SAVED_BEFORE = Object.keys(SAVED).length > 0;   // has this browser used Focus Jams before?
 let S = Object.assign({}, DEF, SAVED);
+var artLums = {};   // album cover brightness, by image address
 if(SAVED.chime === false && !SAVED.focusSound){ S.focusSound = S.breakSound = "none"; }  // older version's "no chime"
 delete S.chime;
 if(!S.clientId) S.clientId = DEFAULT_CLIENT_ID;
@@ -1458,7 +1463,8 @@ function applyLook(){
   bg.style.transform = !art && S.blur ? "scale(1.08)" : "";
   $("bgArt").hidden = !art;
   if(art) artBgUpdate();
-  $("dim").style.opacity = S.dim / 100;
+  const lv = art ? artLevel(artShown) : {a:0};   // album art: extra darkening for bright covers
+  $("dim").style.opacity = 1 - (1 - S.dim / 100) * (1 - lv.a);
   syncSoon();
 }
 // accent colors picked from the cover: vivid, and bright enough to read on a dark (or light) page
@@ -1477,14 +1483,34 @@ function artAccentLoad(url){
     artAccent = pal && pal.length ? pal.slice().sort((a,b) => (b.s * (1 - Math.abs(b.l - 50)/60)) - (a.s * (1 - Math.abs(a.l - 50)/60))).slice(0, 3)
       .map(c => hslHex(c.h, Math.max(62, Math.min(95, c.s)), dark ? Math.max(56, Math.min(68, c.l)) : Math.max(34, Math.min(46, c.l)))) : null;
     applyLook();
+    for(const el of $("bgArt").children) if(el.dataset.url) el.style.filter = `blur(${Math.max(0, +S.artBlur || 0)}px) saturate(1.25) brightness(${artLevel(el.dataset.url).b.toFixed(2)})`;
   };
   if(!url){ done(null); return; }
   const cache = window.artPalettes || (window.artPalettes = {});   // (shared with the visualizer's album colors)
-  if(cache[url]){ done(cache[url]); return; }
+  if(cache[url] && artLums[url] !== undefined){ done(cache[url]); return; }
   const img = new Image(); img.crossOrigin = "anonymous";
-  img.onload = () => { try{ cache[url] = paletteFromImage(img); }catch(e){ cache[url] = false; } done(cache[url] || null); };
+  img.onload = () => {
+    try{ if(!cache[url]) cache[url] = paletteFromImage(img); }catch(e){ cache[url] = false; }
+    try{ artLums[url] = imgBrightness(img); }catch(e){ artLums[url] = null; }
+    done(cache[url] || null);
+  };
   img.onerror = () => done(null);
   img.src = url;
+}
+// steady brightness: how bright each cover is on average (0–1), and how much to darken or brighten it
+function imgBrightness(img){
+  const N = 24, cv = document.createElement("canvas"); cv.width = cv.height = N;
+  const x = cv.getContext("2d", {willReadFrequently:true}); x.drawImage(img, 0, 0, N, N);
+  const d = x.getImageData(0, 0, N, N).data; let t = 0;   // throws if the image can't be read
+  for(let i = 0; i < d.length; i += 4) t += (.2126*d[i] + .7152*d[i+1] + .0722*d[i+2]) / 255;
+  return t / (N*N);
+}
+function artLevel(url){
+  const v = url ? artLums[url] : null;
+  if(!S.artAuto || v == null) return {a:0, b:1};
+  const T = Math.max(.05, Math.min(.9, (+S.artTarget || 30) / 100));
+  if(v > T) return {a:Math.min(.85, 1 - T / v), b:1};          // bright cover: darken it
+  return {a:0, b:Math.min(2, T / Math.max(.04, v))};              // dark cover: brighten it a little
 }
 // album-art background: two layers that cross-fade when the song changes
 var artShown = null, artLayer = 0;
@@ -1493,7 +1519,7 @@ function artBgUpdate(){
   const box = $("bgArt"), L = box.children, url = artNow();
   const blur = Math.max(0, +S.artBlur || 0);
   const css = `blur(${blur}px) saturate(1.25)`, scale = `scale(${1 + Math.min(.5, blur / 200 + .04)})`;   // grow a bit so blurred edges stay off-screen
-  for(const el of L){ el.style.filter = css; el.style.transform = scale; }
+  for(const el of L){ el.style.filter = css + ` brightness(${artLevel(el.dataset.url).b.toFixed(2)})`; el.style.transform = scale; }
   if(url === artShown) return;
   artShown = url;
   if(url !== artAccentUrl) artAccentLoad(url);
@@ -1503,6 +1529,7 @@ function artBgUpdate(){
     if(artShown !== url) return;
     artLayer = 1 - artLayer;
     L[artLayer].style.backgroundImage = `url("${url.replace(/"/g,"%22")}")`;
+    L[artLayer].dataset.url = url; L[artLayer].style.filter = `blur(${blur}px) saturate(1.25) brightness(${artLevel(url).b.toFixed(2)})`;
     L[artLayer].classList.add("on"); L[1 - artLayer].classList.remove("on");
   };
   img.src = url;
@@ -1522,7 +1549,9 @@ function renderLookUI(){
   $("s-modeColors").checked = S.modeColors;
   ["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).checked = !!S[k]);
   $("s-dim").value = S.dim; $("s-blur").value = S.blur; $("s-glass").value = S.glass; $("s-artBlur").value = S.artBlur;
-  $("artBlurRow").hidden = curBg() !== "art"; $("s-blur").closest("label").hidden = curBg() === "art";
+  $("artBlurRow").hidden = curBg() !== "art";
+  $("artAutoRow").hidden = curBg() !== "art"; $("artTargetRow").hidden = curBg() !== "art" || !S.artAuto;
+  $("s-artAuto").checked = !!S.artAuto; $("s-artTarget").value = S.artTarget; $("s-blur").closest("label").hidden = curBg() === "art";
 }
 
 /* ================= timer ================= */
@@ -2603,7 +2632,8 @@ $("c-bg").oninput = e => { S.customBg = e.target.value; applyLook(); };
 $("c-accent").onchange = $("c-bg").onchange = () => { save(); renderLookUI(); };
 $("c-reset").onclick = () => { S.customAccent = null; S.customBg = null; save(); applyLook(); renderLookUI(); };
 $("s-modeColors").onchange = e => { S.modeColors = e.target.checked; save(); applyLook(); };
-[["s-dim","dim"],["s-blur","blur"],["s-glass","glass"],["s-artBlur","artBlur"]].forEach(([id,k]) => {
+$("s-artAuto").onchange = e => { S.artAuto = e.target.checked; save(); applyLook(); artBgUpdate(); renderLookUI(); };
+[["s-dim","dim"],["s-blur","blur"],["s-glass","glass"],["s-artBlur","artBlur"],["s-artTarget","artTarget"]].forEach(([id,k]) => {
   $(id).oninput = e => { S[k] = +e.target.value; applyLook(); };
   $(id).onchange = save;
 });
