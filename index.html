@@ -64,6 +64,9 @@
   .mtd-empty{opacity:.6;padding:4px 0}
   .mtd-results{display:grid;gap:4px;margin-top:6px}
   .mtd-results button{text-align:left}
+  .mtd-near{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:4px 0;border-top:1px solid var(--line)}
+  .mtd-near > button:first-child{flex:1 1 220px}
+  .mtd-side{font-size:12px!important;padding:4px 8px!important;opacity:.85}
   .mtd-sel{display:flex;gap:6px;align-items:center;font-size:13px}
   body.vibes.idle .mtd{opacity:1}
   /* timer view: a slim strip along the edge, and the layout makes room for it so nothing is covered */
@@ -2753,12 +2756,26 @@ async function mtdStopsList(){
   return mtdAllStops = flat;
 }
 function mtdDist(a, b, c, d){ const R = 6371000, r = Math.PI/180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r; return Math.sqrt(x*x + y*y) * R; }
-async function mtdShowNear(lat, lon, label){
+async function mtdShowNear(lat, lon, label, more){
   $("mtdMsg").textContent = "Finding nearby stops…"; $("mtdResults").innerHTML = "";
   try{
-    const near = (await mtdStopsList()).map(s => Object.assign({}, s, {d:mtdDist(lat, lon, s.lat, s.lon)})).sort((a,b) => a.d - b.d).slice(0, 8);
-    $("mtdMsg").textContent = `Closest stops to ${label}:`;
-    $("mtdResults").innerHTML = near.map(st => `<button class="ghost sm" data-mstop="${escH(st.stopId)}" data-mname="${escH(st.name + (st.subName ? " (" + st.subName + ")" : ""))}">${escH(st.name)}${st.subName ? ` <span style="opacity:.6">(${escH(st.subName)})</span>` : ""} <span style="opacity:.6">· ${st.d < 1000 ? Math.round(st.d / 10) * 10 + " m" : (st.d / 1609).toFixed(1) + " mi"}</span></button>`).join("");
+    // one entry per stop (its corners/sides grouped under it), so busy intersections don't crowd out other stops
+    const groups = {};
+    for(const st of await mtdStopsList()){
+      const id = st.stopId.split(":")[0], d = mtdDist(lat, lon, st.lat, st.lon);
+      const g = groups[id] || (groups[id] = {id, name:st.name, d, sides:[]});
+      g.d = Math.min(g.d, d);
+      if(st.stopId.includes(":")) g.sides.push(Object.assign({}, st, {d}));
+      else g.name = st.name;
+    }
+    const n = more ? 16 : 8;
+    const list = Object.values(groups).sort((a,b) => a.d - b.d).slice(0, n);
+    const dist = d => d < 1000 ? Math.round(d / 10) * 10 + " m" : (d / 1609).toFixed(1) + " mi";
+    $("mtdMsg").textContent = `Closest stops to ${label}. Pick a whole stop, or one side to see only buses going that way:`;
+    $("mtdResults").innerHTML = list.map(g => `<div class="mtd-near"><button class="ghost sm" data-mstop="${escH(g.id)}" data-mname="${escH(g.name)}"><b>${escH(g.name)}</b> <span style="opacity:.6">· ${dist(g.d)}</span></button>${
+      g.sides.sort((a,b) => (a.subName || "").localeCompare(b.subName || "")).map(sd => `<button class="ghost sm mtd-side" data-mstop="${escH(sd.stopId)}" data-mname="${escH(g.name + (sd.subName ? " (" + sd.subName + ")" : ""))}">${escH(sd.subName || sd.stopId.split(":")[1])}</button>`).join("")}</div>`).join("")
+      + (more ? "" : `<button class="ghost sm" id="mtdMore">Show more stops</button>`);
+    if(!more) $("mtdMore").onclick = () => mtdShowNear(lat, lon, label, true);
   }catch(e){ $("mtdMsg").textContent = "❌ " + e.message; }
 }
 $("mtdNearPlace").onclick = async () => {
