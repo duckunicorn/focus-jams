@@ -110,6 +110,9 @@
   .v-recent .lbl{font-size:clamp(10px,.8vw,13px);letter-spacing:.16em;text-transform:uppercase;opacity:.6;align-self:center}
   .v-photo{position:fixed;right:3vw;bottom:5vh;width:clamp(160px,19vw,360px);aspect-ratio:4/3;border-radius:14px;overflow:hidden;box-shadow:0 14px 50px rgba(0,0,0,.5);transform:rotate(2.5deg);border:6px solid #fff;background:#fff;z-index:2}
   .v-photo[hidden]{display:none}
+  .vphoto-opts{display:grid;gap:6px;margin:2px 0 4px 26px;font-size:13px}
+  .vphoto-opts input[type=number]{width:64px;padding:3px 6px;margin:0 4px}
+  .vphoto-opts[hidden]{display:none}
   .v-photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.6s ease}
   .v-photo img.on{opacity:1}
   #vViz{position:fixed;left:0;right:0;bottom:0;width:100vw;height:34vh;pointer-events:none;z-index:0;display:none}
@@ -1355,7 +1358,11 @@
     <div class="toggles">
       <label><input type="checkbox" id="s-vibesDrift"> Slowly drift the background</label>
       <label><input type="checkbox" id="s-vibesViz"> Calm visualizer</label>
-      <label><input type="checkbox" id="s-vibesPhotos"> Photo slideshow (tonight's album, or recent ones)</label>
+      <label><input type="checkbox" id="s-vibesPhotos"> Photo slideshow</label>
+      <div id="vPhotoOpts" class="vphoto-opts">
+        <label>Show at least <input type="number" id="s-vibesMinPhotos" min="1" max="500" step="1"> photos: if tonight's album has fewer, earlier nights' photos are added (newest first, shared archive included)</label>
+        <label><input type="checkbox" id="s-vibesAllTime"> Use every photo from every night instead, shuffled</label>
+      </div>
       <label><input type="checkbox" id="s-vibesRecent"> Recently played songs</label>
     </div>
     </div>
@@ -1456,7 +1463,7 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              theme:"tomato", customAccent:null, customBg:null, modeColors:true,
              bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60, artAuto:true, artTarget:30,
              mtdOn:false, mtdKey:"", mtdStop:"", mtdStopName:"", mtdCorner:"bl", mtdWhere:"both", mtdCount:4, mtdPhones:true, mtdScreenAlerts:true,
-             vibes:false, vibesBg:"art", vibesDrift:true, vibesViz:true, vibesPhotos:true, vibesRecent:true};
+             vibes:false, vibesBg:"art", vibesDrift:true, vibesViz:true, vibesPhotos:true, vibesRecent:true, vibesMinPhotos:20, vibesAllTime:false};
 
 const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
@@ -1680,7 +1687,9 @@ function renderLookUI(){
   $("c-accent").value = colors().accent;
   $("c-bg").value = c.bg;
   $("s-modeColors").checked = S.modeColors;
-  ["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).checked = !!S[k]);
+  ["vibesDrift","vibesViz","vibesPhotos","vibesRecent","vibesAllTime"].forEach(k => $("s-"+k).checked = !!S[k]);
+  $("s-vibesMinPhotos").value = S.vibesMinPhotos; $("vPhotoOpts").hidden = !S.vibesPhotos;
+  $("s-vibesMinPhotos").disabled = !!S.vibesAllTime;
   renderMtdUI();
   $("s-dim").value = S.dim; $("s-blur").value = S.blur; $("s-glass").value = S.glass; $("s-artBlur").value = S.artBlur;
   $("artBlurRow").hidden = curBg() !== "art";
@@ -2638,29 +2647,47 @@ function vibesRecent(){
   $("vRecent").innerHTML = list.length ? `<span class="lbl">Earlier</span>` + list.map(t => `<div>${t.art ? `<img src="${escH(t.art)}" alt="">` : ""}<div style="min-width:0"><b>${escH(t.name)}</b>${t.artist ? `<span>${escH(t.artist)}</span>` : ""}</div></div>`).join("") : "";
 }
 // photo slideshow: tonight's album, or the most recent photos on this computer
+// photo slideshow: tonight's album first; if that's fewer than the minimum, keep adding earlier nights
+// (this computer's photos, then the shared archive's). Or: every photo from every night, shuffled.
+var vRemoteCache = {};   // night id → {at, list} from the shared archive (re-asked at most every 10 min)
+async function vNightRemote(id){
+  const c = vRemoteCache[id];
+  if(c && Date.now() - c.at < 10*60*1000) return c.list;
+  let list = [];
+  try{ list = ((await archJson("GET", "/photos?night=" + encodeURIComponent(id))) || []).map(x => ({id:x.id, ts:x.ts || 0, url:arcBase() + "/photo/" + encodeURIComponent(x.id), remote:true})); }catch(e){ return c ? c.list : []; }
+  vRemoteCache[id] = {at:Date.now(), list};
+  return list;
+}
 async function vibesPhotos(){
   vPhotoAt = Date.now();
   if(!S.vibes || !S.vibesPhotos){ $("vPhoto").hidden = true; clearInterval(vPhotoT); vPhotoT = null; return; }
-  let list = [];
-  try{
-    if(night) list = await nightPhotos(night.id);
-    if(!list.length) list = ((await idbDo("readonly", st => st.getAll(), "photos")) || []).sort((a,b) => b.ts - a.ts).slice(0, 40);
-  }catch(e){}
-  list = list.filter(p => p.blob);
-  let remote = [];
-  if(!list.length && arcBase()){   // nothing on this computer: show recent photos from the shared archive
-    try{
-      for(const r of getHist().nights.filter(r => r.photos).slice(0, 4)){
-        const ph = await archJson("GET", "/photos?night=" + encodeURIComponent(r.id));
-        remote = remote.concat((ph || []).map(x => ({id:x.id, url:arcBase() + "/photo/" + encodeURIComponent(x.id), remote:true})));
-        if(remote.length >= 24) break;
-      }
-    }catch(e){}
+  const min = Math.max(1, +S.vibesMinPhotos || 20), allTime = !!S.vibesAllTime;
+  let local = [];
+  try{ local = ((await idbDo("readonly", st => st.getAll(), "photos")) || []).filter(p => p.blob); }catch(e){}
+  const byNight = {};
+  for(const p of local) (byNight[p.night] = byNight[p.night] || []).push(p);
+  const out = [], seen = new Set();
+  const addLocal = arr => arr.slice().sort((a,b) => b.ts - a.ts).forEach(p => { if(!seen.has(p.id)){ seen.add(p.id); out.push({id:p.id, blob:p.blob}); } });
+  const addRemote = arr => arr.forEach(p => { if(!seen.has(p.id)){ seen.add(p.id); out.push(p); } });
+  // the nights to draw from, newest first: tonight, then the history (which includes other screens' nights when sharing)
+  const nights = [];
+  if(night) nights.push(night.id);
+  for(const r of getHist().nights) if(!nights.includes(r.id) && (r.photos || byNight[r.id])) nights.push(r.id);
+  for(const id of Object.keys(byNight)) if(!nights.includes(id)) nights.push(id);   // photos whose night isn't in the history
+  for(const id of nights){
+    if(!allTime && out.length >= min) break;
+    if(byNight[id]) addLocal(byNight[id]);
+    if(arcBase() && id !== (night && night.id)){
+      const h = getHist().nights.find(r => r.id === id);
+      if(!byNight[id] || (h && h.photos > byNight[id].length)) addRemote(await vNightRemote(id));   // only ask the archive for what this computer doesn't have
+    }
+    if(allTime && out.length > 2000) break;
   }
-  const ids = (list.length ? list : remote).map(p => p.id).join();
-  if(ids === vPhotos.map(p => p.id).join()) return;
+  if(allTime) for(let i = out.length - 1; i > 0; i--){ const k = Math.floor(Math.random() * (i + 1)); [out[i], out[k]] = [out[k], out[i]]; }
+  const ids = out.map(p => p.id).join();
+  if(allTime ? vPhotos.length && out.length === vPhotos.length && out.every(p => vPhotos.some(v => v.id === p.id)) : ids === vPhotos.map(p => p.id).join()) return;
   vPhotos.forEach(p => { if(!p.remote) URL.revokeObjectURL(p.url); });
-  vPhotos = list.length ? list.map(p => ({id:p.id, url:URL.createObjectURL(p.blob)})) : remote;
+  vPhotos = out.map(p => p.remote ? p : {id:p.id, url:URL.createObjectURL(p.blob)});
   $("vPhoto").hidden = !vPhotos.length;
   clearInterval(vPhotoT); vPhotoT = null;
   if(!vPhotos.length) return;
@@ -2705,7 +2732,8 @@ function vibesViz(ts){
   vVizRaf = requestAnimationFrame(vibesViz);
 }
 $("vibesBtn").onclick = e => { setVibes(!S.vibes); e.currentTarget.blur(); };   // (blur: so Space doesn't press it again)
-["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); applyVibes(); });
+["vibesDrift","vibesViz","vibesPhotos","vibesRecent","vibesAllTime"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); applyVibes(); renderLookUI(); });
+$("s-vibesMinPhotos").onchange = e => { S.vibesMinPhotos = Math.max(1, Math.min(500, Math.round(+e.target.value) || 20)); e.target.value = S.vibesMinPhotos; save(); vPhotoAt = 0; vibesPhotos(); };
 
 
 /* ================= UIUC MTD bus times ================= */
