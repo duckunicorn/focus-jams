@@ -2647,10 +2647,20 @@ async function vibesPhotos(){
     if(!list.length) list = ((await idbDo("readonly", st => st.getAll(), "photos")) || []).sort((a,b) => b.ts - a.ts).slice(0, 40);
   }catch(e){}
   list = list.filter(p => p.blob);
-  const ids = list.map(p => p.id).join();
+  let remote = [];
+  if(!list.length && arcBase()){   // nothing on this computer: show recent photos from the shared archive
+    try{
+      for(const r of getHist().nights.filter(r => r.photos).slice(0, 4)){
+        const ph = await archJson("GET", "/photos?night=" + encodeURIComponent(r.id));
+        remote = remote.concat((ph || []).map(x => ({id:x.id, url:arcBase() + "/photo/" + encodeURIComponent(x.id), remote:true})));
+        if(remote.length >= 24) break;
+      }
+    }catch(e){}
+  }
+  const ids = (list.length ? list : remote).map(p => p.id).join();
   if(ids === vPhotos.map(p => p.id).join()) return;
-  vPhotos.forEach(p => URL.revokeObjectURL(p.url));
-  vPhotos = list.map(p => ({id:p.id, url:URL.createObjectURL(p.blob)}));
+  vPhotos.forEach(p => { if(!p.remote) URL.revokeObjectURL(p.url); });
+  vPhotos = list.length ? list.map(p => ({id:p.id, url:URL.createObjectURL(p.blob)})) : remote;
   $("vPhoto").hidden = !vPhotos.length;
   clearInterval(vPhotoT); vPhotoT = null;
   if(!vPhotos.length) return;
@@ -2704,19 +2714,24 @@ function mtdBase(){
   const h = SYNC ? PHSRV : normHost(S.syncServer);
   return h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/mtd` : "https://api.mtd.dev";   // without a sync server, ask MTD directly
 }
+const mtdId = id => encodeURIComponent(id).replace(/%3A/gi, ":");
 async function mtdGet(path){
   const r = await fetch(mtdBase() + path, {headers:S.mtdKey ? {"X-ApiKey":S.mtdKey} : {}, cache:"no-store"});
   let j = null; try{ j = await r.json(); }catch(e){}
   if(r.status === 401 && SYNC) throw new Error("bus times need the MTD key on the sync server. Ask whoever runs the big screen (Customize → 🚌 Bus times explains it)");
   if(r.status === 401 || r.status === 403) throw new Error("MTD didn't accept the API key");
-  if(r.status === 404 && !j) throw new Error("your sync server needs the latest update (Cloudflare installs it within a few minutes)");
+  if(r.status === 404 && !j){
+    let newServer = false;
+    try{ newServer = (await fetch(mtdBase() + "/ping", {cache:"no-store"})).ok; }catch(e){}
+    throw new Error(newServer ? "MTD doesn't know that stop. Pick it again in Customize → 🚌 Bus times" : "your sync server needs the latest update (Cloudflare installs it within a few minutes)");
+  }
   if(!r.ok || !j) throw new Error((j && (j.error && (j.error.message || j.error))) || "HTTP " + r.status);
   return j.result || [];
 }
 async function mtdPoll(){
   if(!mtdVisible() || document.hidden) return;
   try{
-    mtdData = (await mtdGet(`/stops/${encodeURIComponent(S.mtdStop)}/departures?time=60`))
+    mtdData = (await mtdGet(`/stops/${mtdId(S.mtdStop)}/departures?time=60`))
       .sort((a,b) => (a.minutesTillDeparture ?? 999) - (b.minutesTillDeparture ?? 999));
     mtdAt = Date.now(); mtdErr = "";
   }catch(e){ mtdErr = e.message || String(e); }
@@ -4920,7 +4935,7 @@ async function pbFind(){
   if(pb.from.id === pb.to.id){ pbSay("Those are the same stop."); return; }
   pbSay("Looking for buses…"); $("pbRides").innerHTML = "";
   try{
-    const [A, B] = await Promise.all([mtdGet(`/stops/${encodeURIComponent(pb.from.id)}/departures?time=90`), mtdGet(`/stops/${encodeURIComponent(pb.to.id)}/departures?time=150`)]);
+    const [A, B] = await Promise.all([mtdGet(`/stops/${mtdId(pb.from.id)}/departures?time=90`), mtdGet(`/stops/${mtdId(pb.to.id)}/departures?time=150`)]);
     const atB = {};
     for(const d of B){ const t = d.trip && d.trip.tripId; if(t) (atB[t] = atB[t] || []).push(pbTime(d)); }
     pbRidesList = A.map(d => {
@@ -4974,7 +4989,7 @@ function pbSave(){ try{ sessionStorage.setItem("fj-buswatch", JSON.stringify(pbW
 async function pbWatchPoll(){
   if(!pbW) return;
   try{
-    const A = await mtdGet(`/stops/${encodeURIComponent(pbW.from.id)}/departures?time=90`);
+    const A = await mtdGet(`/stops/${mtdId(pbW.from.id)}/departures?time=90`);
     const d = A.find(x => x.trip && x.trip.tripId === pbW.trip);
     if(!d){ if(Date.now() > pbW.dep - 60000){ pbSay(`Your ${busName(pbW.rt, pbW.hs)} has left ${pbW.from.n}.`); pbWatchStop(); return; } }
     else { pbW.dep = pbTime(d); pbW.live = d.isRealTime; }

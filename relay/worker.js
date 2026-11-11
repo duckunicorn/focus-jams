@@ -40,7 +40,9 @@ export default {
     }
     // UIUC MTD bus times: /mtd/stops/<stop>/departures and /mtd/stops/search?query=… are passed to api.mtd.dev.
     // The MTD key comes from the server's MTD_KEY secret if set, otherwise from the page (X-ApiKey).
-    const mt = url.pathname.match(/^\/mtd\/(stops|stops\/search|stops\/[A-Za-z0-9:_-]{1,40}\/departures)$/);
+    if (url.pathname === "/mtd/ping") return json({ ok: true, key: !!env.MTD_KEY });
+    let mpath = url.pathname; try { mpath = decodeURIComponent(mpath); } catch (e) {}   // "6THGRG%3A2" → "6THGRG:2"
+    const mt = mpath.match(/^\/mtd\/(stops|stops\/search|stops\/[A-Za-z0-9:_.-]{1,40}\/departures)$/);
     if (mt) {
       if (req.method !== "GET") return new Response("Read-only", { status: 405, headers: CORS });
       const key = env.MTD_KEY || req.headers.get("x-apikey") || "";
@@ -51,8 +53,15 @@ export default {
       const cache = caches.default;
       let res = await cache.match(cacheKey);
       if (!res) {
-        const up = await fetch(target, { headers: { "X-ApiKey": key, "accept": "application/json" } });
+        let up;
+        try { up = await fetch(target, { headers: { "X-ApiKey": key, "accept": "application/json" } }); }
+        catch (e) { return json({ error: "couldn't reach MTD right now" }, 502); }
         const age = mt[1] === "stops" ? 86400 : 20;   // the full stop list barely changes
+        if (!up.ok) {   // pass MTD's reason along in a form the page can read
+          const txt = (await up.text()).slice(0, 300);
+          let msg = txt; try { const j = JSON.parse(txt); msg = (j.error && (j.error.message || j.error)) || j.message || txt; } catch (e) {}
+          return json({ error: "MTD said " + up.status + (msg ? ": " + msg : "") }, up.status);
+        }
         res = new Response(up.body, { status: up.status, headers: { "content-type": "application/json", "cache-control": "max-age=" + age, ...CORS } });
         if (up.ok) await cache.put(cacheKey, res.clone());
       }
