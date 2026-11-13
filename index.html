@@ -2876,7 +2876,8 @@ function mtdFindLast(){
   if(!times.length) return;
   const last = times[times.length - 1];
   // only call it "last" if the list stops well before the end of what MTD was asked for
-  if(last.t < Date.now() + (MTD_WIN - 20) * 60000) mtdLast = last;
+  const win = mtdWinNow();
+  if(last.t < Date.now() + (win - Math.min(20, win / 3)) * 60000) mtdLast = last;
 }
 function mtdLastCheck(){
   mtdFindLast();
@@ -2897,6 +2898,20 @@ function mtdBase(){
   return h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/mtd` : "https://api.mtd.dev";   // without a sync server, ask MTD directly
 }
 const mtdId = id => encodeURIComponent(id).replace(/%3A/gi, ":");
+// Departures for a stop, `mins` ahead. If MTD refuses a window that long, fall back to 60 minutes
+// (and remember, so later requests don't fail first).
+var mtdMaxWin = +(store.get("fj-mtdwin") || 0) || 0;
+async function mtdDeps(stop, mins){
+  const want = mtdMaxWin ? Math.min(mins, mtdMaxWin) : mins;
+  try{ return await mtdGet(`/stops/${mtdId(stop)}/departures?time=${want}`); }
+  catch(e){
+    if(want <= 60 || /key|sync server|reach/i.test(e.message || "")) throw e;   // a key/server problem: a shorter window won't help
+    const r = await mtdGet(`/stops/${mtdId(stop)}/departures?time=60`);
+    mtdMaxWin = 60; store.set("fj-mtdwin", 60);
+    return r;
+  }
+}
+const mtdWinNow = () => mtdMaxWin ? Math.min(MTD_WIN, mtdMaxWin) : MTD_WIN;
 async function mtdGet(path){
   const r = await fetch(mtdBase() + path, {headers:S.mtdKey ? {"X-ApiKey":S.mtdKey} : {}, cache:"no-store"});
   let j = null; try{ j = await r.json(); }catch(e){}
@@ -2913,7 +2928,7 @@ async function mtdGet(path){
 async function mtdPoll(){
   if(!mtdVisible() || document.hidden) return;
   try{
-    mtdData = (await mtdGet(`/stops/${mtdId(S.mtdStop)}/departures?time=${MTD_WIN}`))
+    mtdData = (await mtdDeps(S.mtdStop, MTD_WIN))
       .sort((a,b) => (a.minutesTillDeparture ?? 999) - (b.minutesTillDeparture ?? 999));
     mtdAt = Date.now(); mtdErr = "";
   }catch(e){ mtdErr = e.message || String(e); }
@@ -5214,7 +5229,7 @@ async function pbFind(){
   if(pb.from.id === pb.to.id){ pbSay("Those are the same stop."); return; }
   pbSay("Looking for buses…"); $("pbRides").innerHTML = "";
   try{
-    const [A, B] = await Promise.all([mtdGet(`/stops/${mtdId(pb.from.id)}/departures?time=90`), mtdGet(`/stops/${mtdId(pb.to.id)}/departures?time=150`)]);
+    const [A, B] = await Promise.all([mtdDeps(pb.from.id, 90), mtdDeps(pb.to.id, 150)]);
     const atB = {};
     for(const d of B){ const t = d.trip && d.trip.tripId; if(t) (atB[t] = atB[t] || []).push(pbTime(d)); }
     pbRidesList = A.map(d => {
@@ -5268,7 +5283,7 @@ function pbSave(){ try{ sessionStorage.setItem("fj-buswatch", JSON.stringify(pbW
 async function pbWatchPoll(){
   if(!pbW) return;
   try{
-    const A = await mtdGet(`/stops/${mtdId(pbW.from.id)}/departures?time=90`);
+    const A = await mtdDeps(pbW.from.id, 90);
     const d = A.find(x => x.trip && x.trip.tripId === pbW.trip);
     if(!d){ if(Date.now() > pbW.dep - 60000){ pbSay(`Your ${busName(pbW.rt, pbW.hs)} has left ${pbW.from.n}.`); pbWatchStop(); return; } }
     else { pbW.dep = pbTime(d); pbW.live = d.isRealTime; }
