@@ -2385,7 +2385,7 @@ function renderApp(){
   $("redir").textContent = IS_FILE ? "http://127.0.0.1:8888/" : REDIRECT.replace("localhost","127.0.0.1");
   $("connect").disabled = IS_FILE || IS_LOCALHOST;
   $("connect").style.opacity = $("connect").disabled ? .5 : 1;
-  $("clientId").value = S.clientId === DEFAULT_CLIENT_ID ? "" : S.clientId;
+  $("clientId").value = S.clientId || DEFAULT_CLIENT_ID;   // always show the ID that Connect will use
   $("s-appsync").checked = S.appsync;
 }
 function setSource(src){
@@ -5899,7 +5899,7 @@ function suRender(){
     document.querySelectorAll('[name="suMusic"]').forEach(r => r.checked = r.value === m);
     $("suApp").hidden = m !== "app";
     $("suRedir").textContent = REDIRECT.replace("localhost", "127.0.0.1");
-    if(document.activeElement !== $("suClientId")) $("suClientId").value = S.clientId === DEFAULT_CLIENT_ID ? "" : S.clientId;
+    if(document.activeElement !== $("suClientId")) $("suClientId").value = S.clientId || DEFAULT_CLIENT_ID;
     $("suAppMsg").textContent = auth ? "✅ Spotify is connected. Click Next." : IS_FILE ? "⚠️ Open Focus Jams from its web address (not a file on your computer) to connect Spotify." : "";
   }
   if(suStep === 2){
