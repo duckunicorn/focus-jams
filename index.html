@@ -40,6 +40,7 @@
   .vizconnect-wrap{display:none;position:fixed;left:27vw;bottom:5vh;transform:translateX(-50%);z-index:6}
   body.viz.needsound .vizconnect-wrap{display:block}
   @media (max-width:820px){ .vizconnect-wrap{left:50vw} }
+  body.vibes .vizconnect-wrap{left:50vw;bottom:3vh}   /* Vibes: bottom middle, clear of the corners */
   .vizconnect{display:none;width:max-content;max-width:90vw;box-shadow:0 10px 40px -8px var(--accent),0 0 0 4px rgba(0,0,0,.35) !important;font-size:clamp(15px,1.3vw,24px) !important;padding:.9em 1.4em !important}
   body.viz.needsound .vizconnect{display:block}
   body.viz.needsound.idle .vizconnect{display:block;opacity:1;cursor:pointer}
@@ -48,6 +49,11 @@
   #bgArt[hidden]{display:none}
   #bgArt i{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity 1.4s ease;will-change:opacity}
   #bgArt i.on{opacity:1}
+  /* ===== weather ===== */
+  .wx-hdr{font-size:clamp(14px,1.2vw,22px);opacity:.85;white-space:nowrap;align-self:center}
+  .wx-hdr[hidden],.v-wx[hidden]{display:none}
+  body.vibes .wx-hdr{display:none}
+  .v-wx{font-size:clamp(16px,1.8vw,30px);opacity:.85;pointer-events:none}
   /* ===== bus times ===== */
   .mtd{position:fixed;z-index:6;width:clamp(240px,21vw,400px);background:color-mix(in srgb,var(--bg) 72%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid color-mix(in srgb,var(--ink) 12%,transparent);border-radius:16px;padding:10px 12px;color:var(--ink);font-size:clamp(12px,.95vw,17px);box-shadow:0 8px 30px rgba(0,0,0,.25)}
   .mtd[hidden]{display:none}
@@ -62,6 +68,8 @@
   .mtd-min .rt{display:inline-block;width:.45em;height:.45em;border-radius:50%;background:#3ddc84;margin-right:.35em;vertical-align:middle;animation:mtdpulse 2s infinite}
   @keyframes mtdpulse{50%{opacity:.35}}
   .mtd-empty{opacity:.6;padding:4px 0}
+  .mtd-row.last{background:color-mix(in srgb,var(--accent) 16%,transparent);border-radius:8px;padding-left:4px;padding-right:4px}
+  .mtd-lastlbl{flex:none;font-size:.7em;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--accent)}
   .mtd-results{display:grid;gap:4px;margin-top:6px}
   .mtd-results button{text-align:left}
   .mtd-near{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:4px 0;border-top:1px solid var(--line)}
@@ -85,7 +93,7 @@
   #vibes{display:none}
   body.vibes #vibes{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:calc(100vh - 110px);gap:1.5vh;padding-bottom:10vh}
   body.vibes .grid{position:fixed;left:-400vw;top:0;width:1200px;visibility:hidden;pointer-events:none}   /* kept alive so the built-in player keeps playing */
-  body.vibes header .clock,body.vibes #count,body.vibes #nightBtn,body.vibes .vizconnect-wrap,body.vibes #vizBadge{display:none!important}
+  body.vibes header .clock,body.vibes #count,body.vibes #nightBtn,body.vibes #vizBadge{display:none!important}
   body.vibes header{justify-content:space-between}
   body.vibes.idle .hdr-r,body.vibes.idle header .brand{opacity:0;pointer-events:none}
   body.vibes.idle{cursor:none}
@@ -488,6 +496,8 @@
   #phCtlModes button{flex:1}
   .ph-bus{display:grid;gap:10px;margin-top:10px}
   .pb-field{display:grid;gap:6px} .pb-field .row input{flex:1;min-width:0}
+  .pb-last{background:color-mix(in srgb,var(--accent) 18%,transparent);border-radius:10px;padding:8px 10px;font-size:14px}
+  .pb-last[hidden]{display:none}
   .pb-pick{font-size:14px;color:var(--accent)} .pb-pick:empty{display:none}
   .pb-res{display:grid;gap:4px} .pb-res:empty{display:none}
   .pb-res button{text-align:left;font-size:13px}
@@ -606,6 +616,7 @@
   <header>
     <div class="brand"><span class="dot"></span>Focus Jams</div>
     <div class="clock" title="Current time"><div class="clock-t" id="clockT">--:--</div><div class="clock-d" id="clockD"></div></div>
+    <div class="wx-hdr" id="wxHdr" hidden></div>
     <div class="hdr-r">
       <div class="count" id="count">0 focus sessions today</div>
       <button class="ghost sm" id="nightBtn" hidden title="End tonight and show the recap">🏁 End night</button>
@@ -621,6 +632,7 @@
   <div id="vibes">
     <div class="v-clock" id="vClock">--:--</div>
     <div class="v-date" id="vDate"></div>
+    <div class="v-wx" id="vWx" hidden></div>
     <div class="v-np" id="vNp" hidden>
       <img id="vArt" alt="">
       <div class="v-np-t">
@@ -935,6 +947,7 @@
       <div class="pb-field"><b>To</b><div class="pb-pick" id="pbToSel"></div>
         <div class="row"><input type="text" id="pbToQ" placeholder="Where are you going?" autocomplete="off"><button class="ghost sm" data-pbs="to">Search</button><button class="ghost sm" data-pbnear="to" title="Stops near me">📍</button></div>
         <div class="pb-res" id="pbToRes"></div></div>
+      <div class="pb-last" id="pbLast" hidden></div>
       <button class="big" id="pbFind" style="width:100%;margin-top:6px">Find buses</button>
       <div id="pbRides"></div>
       <div id="pbWatch" class="pb-watch" hidden></div>
@@ -1371,15 +1384,25 @@
       <div class="toggles" style="margin-top:8px">
         <label><input type="checkbox" id="s-mtdPhones"> 📱 Bus alerts on phones: people pick where they're going and get alerted when their bus is close (needs the key saved on the server as <code>MTD_KEY</code>, below)</label>
         <label><input type="checkbox" id="s-mtdScreenAlerts"> Show people's bus alerts on the big screen too (when they choose to)</label>
+        <label><input type="checkbox" id="s-mtdLastAlert"> 🌙 Warn when the last bus of the night is coming (from <select id="s-mtdLastFrom"></select> on, <select id="s-mtdLastLead"><option>10</option><option>15</option><option>20</option><option>30</option></select> min and 5 min before)</label>
       </div>
       <p class="hint">The key stays on this computer and is sent only through your sync server to MTD (never to phones). For extra safety, put it on the server instead: in Cloudflare, open your focus-jams Worker → Settings → Variables and Secrets → add a secret named <code>MTD_KEY</code>; then you can leave the box above empty.</p>
     </div>
+
+    <h3>🌤 Weather</h3>
+    <div class="toggles"><label><input type="checkbox" id="s-wxOn"> Show the outside temperature and conditions (next to the clock, and in Vibes mode)</label></div>
+    <div class="row" style="flex-wrap:wrap;gap:10px;margin-top:6px">
+      <label class="mtd-sel">Units <select id="s-wxUnit"><option value="F">°F</option><option value="C">°C</option></select></label>
+      <button class="ghost sm" id="wxHere">📍 Use this computer's location</button>
+      <button class="ghost sm" id="wxCU">Champaign–Urbana</button>
+    </div>
+    <p class="hint" id="wxMsg"></p>
 
     <h3>🌙 Vibes mode</h3>
     <p class="hint" style="margin-top:0">A big clock and the music, no timer. For hanging out. Turn it on with <b>🌙 Vibes</b> at the top (or press B). Pick a background while in Vibes mode to give it its own.</p>
     <div class="toggles">
       <label><input type="checkbox" id="s-vibesDrift"> Slowly drift the background</label>
-      <label><input type="checkbox" id="s-vibesViz"> Calm visualizer</label>
+      <label>Visualizer <select id="s-vibesVizMode"><option value="calm">Calm waves</option><option value="full">Full visualizer (like breaks)</option><option value="off">Off</option></select></label>
       <label><input type="checkbox" id="s-vibesPhotos"> Photo slideshow</label>
       <div id="vPhotoOpts" class="vphoto-opts">
         <label>Which photos <select id="s-vibesPhotoMode">
@@ -1489,7 +1512,8 @@ const DEF = {focus:25, short:5, long:15, every:4, auto:true, notify:false,
              theme:"tomato", customAccent:null, customBg:null, modeColors:true,
              bg:"glow", dim:0, blur:0, glass:16, imgUrl:"", artBlur:60, artAuto:true, artTarget:30,
              mtdOn:false, mtdKey:"", mtdStop:"", mtdStopName:"", mtdCorner:"bl", mtdWhere:"both", mtdCount:4, mtdPhones:true, mtdScreenAlerts:true,
-             vibes:false, vibesBg:"art", vibesDrift:true, vibesViz:true, vibesPhotos:true, vibesRecent:true, vibesMinPhotos:20, vibesAllTime:false, vibesPhotoMode:"fill", vibesNights:[]};
+             vibes:false, vibesBg:"art", vibesDrift:true, vibesViz:true, vibesPhotos:true, vibesRecent:true, vibesMinPhotos:20, vibesAllTime:false, vibesPhotoMode:"fill", vibesNights:[], vibesVizMode:"",
+             wxOn:true, wxUnit:"F", wxLat:null, wxLon:null, wxPlace:"", mtdLastAlert:true, mtdLastFrom:21, mtdLastLead:15};
 
 const store = {
   get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
@@ -1713,12 +1737,13 @@ function renderLookUI(){
   $("c-accent").value = colors().accent;
   $("c-bg").value = c.bg;
   $("s-modeColors").checked = S.modeColors;
-  ["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).checked = !!S[k]);
+  ["vibesDrift","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).checked = !!S[k]);
+  $("s-vibesVizMode").value = vibesVizMode();
   $("s-vibesMinPhotos").value = S.vibesMinPhotos; $("vPhotoOpts").hidden = !S.vibesPhotos;
   $("s-vibesPhotoMode").value = vPhotoMode();
   $("vMinRow").hidden = vPhotoMode() !== "fill"; $("vPickBox").hidden = vPhotoMode() !== "pick";
   if(vPhotoMode() === "pick") vPickRender();
-  renderMtdUI();
+  renderMtdUI(); renderWxUI();
   $("s-dim").value = S.dim; $("s-blur").value = S.blur; $("s-glass").value = S.glass; $("s-artBlur").value = S.artBlur;
   $("artBlurRow").hidden = curBg() !== "art";
   $("artAutoRow").hidden = curBg() !== "art"; $("artTargetRow").hidden = curBg() !== "art" || !S.artAuto;
@@ -2627,8 +2652,9 @@ function setVibes(on){
 function applyVibes(){
   const on = !!S.vibes && !SYNC;
   document.body.classList.toggle("vibes", on);
+  if(typeof vizUpdate === "function") setTimeout(vizUpdate, 0);   // full visualizer in Vibes (or stop it when leaving)
   document.body.classList.toggle("vdrift", on && S.vibesDrift);
-  document.body.classList.toggle("vviz", on && S.vibesViz);
+  document.body.classList.toggle("vviz", on && vibesVizMode() === "calm");
   $("vibesBtn").textContent = on ? "⏱ Timer" : "🌙 Vibes";
   $("vibesBtn").title = on ? "Back to the timer (B)" : "Vibes mode: big clock and music, no timer (B)";
   clearInterval(vibesT); vibesT = null; cancelAnimationFrame(vVizRaf); vVizRaf = 0;
@@ -2636,7 +2662,7 @@ function applyVibes(){
   vibesTick(); vibesT = setInterval(vibesTick, 500);
   vibesRecent();
   vPhotoAt = 0; vibesPhotos();
-  if(S.vibesViz) vVizRaf = requestAnimationFrame(vibesViz);
+  if(vibesVizMode() === "calm") vVizRaf = requestAnimationFrame(vibesViz);
   wake();
 }
 function vibesTick(){
@@ -2733,7 +2759,7 @@ function vibesPhotoNext(){
 }
 // calm visualizer: soft waves along the bottom; they follow the music if computer sound is connected
 function vibesViz(ts){
-  if(!S.vibes || !S.vibesViz){ vVizRaf = 0; return; }
+  if(!S.vibes || vibesVizMode() !== "calm"){ vVizRaf = 0; return; }
   const cv = $("vViz"), dpr = Math.min(2, devicePixelRatio || 1);
   const W = Math.round(cv.clientWidth * dpr), H = Math.round(cv.clientHeight * dpr);
   if(cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
@@ -2762,7 +2788,8 @@ function vibesViz(ts){
   vVizRaf = requestAnimationFrame(vibesViz);
 }
 $("vibesBtn").onclick = e => { setVibes(!S.vibes); e.currentTarget.blur(); };   // (blur: so Space doesn't press it again)
-["vibesDrift","vibesViz","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); applyVibes(); renderLookUI(); });
+["vibesDrift","vibesPhotos","vibesRecent"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); applyVibes(); renderLookUI(); });
+$("s-vibesVizMode").onchange = e => { S.vibesVizMode = e.target.value; save(); applyVibes(); vizUpdate(); };
 $("s-vibesPhotoMode").onchange = e => { S.vibesPhotoMode = e.target.value; S.vibesAllTime = false; save(); renderLookUI(); vPhotoAt = 0; if(S.vibes) vibesPhotos(); };
 // the night picker: tonight + every night in the history that has photos
 function vPickRender(){
@@ -2789,8 +2816,82 @@ $("vPickList").addEventListener("click", e => {
 $("s-vibesMinPhotos").onchange = e => { S.vibesMinPhotos = Math.max(1, Math.min(500, Math.round(+e.target.value) || 20)); e.target.value = S.vibesMinPhotos; save(); vPhotoAt = 0; vibesPhotos(); };
 
 
+
+/* ================= weather (Open-Meteo: free, no key) ================= */
+var wxData = null, wxAt = 0;
+const WX = {0:["☀️","Clear"],1:["🌤","Mostly clear"],2:["⛅","Partly cloudy"],3:["☁️","Cloudy"],45:["🌫","Fog"],48:["🌫","Freezing fog"],
+  51:["🌦","Light drizzle"],53:["🌦","Drizzle"],55:["🌧","Heavy drizzle"],56:["🌧","Freezing drizzle"],57:["🌧","Freezing drizzle"],
+  61:["🌦","Light rain"],63:["🌧","Rain"],65:["🌧","Heavy rain"],66:["🌧","Freezing rain"],67:["🌧","Freezing rain"],
+  71:["🌨","Light snow"],73:["🌨","Snow"],75:["❄️","Heavy snow"],77:["🌨","Snow grains"],80:["🌦","Showers"],81:["🌧","Showers"],82:["⛈","Heavy showers"],
+  85:["🌨","Snow showers"],86:["❄️","Heavy snow showers"],95:["⛈","Thunderstorm"],96:["⛈","Thunderstorm, hail"],99:["⛈","Thunderstorm, hail"]};
+function wxPlace(){
+  if(S.wxLat != null && S.wxLon != null) return {lat:S.wxLat, lon:S.wxLon};
+  return {lat:40.1106, lon:-88.2272};   // Champaign–Urbana (campus)
+}
+async function wxFetch(){
+  if(!S.wxOn || SYNC || ARCV) return;
+  const {lat, lon} = wxPlace();
+  try{
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&current=temperature_2m,apparent_temperature,weather_code,is_day&temperature_unit=${S.wxUnit === "C" ? "celsius" : "fahrenheit"}&timezone=auto`;
+    const j = await (await fetch(u, {cache:"no-store"})).json();
+    if(j && j.current){ wxData = j.current; wxAt = Date.now(); }
+  }catch(e){}
+  wxRender();
+}
+function wxRender(){
+  const on = S.wxOn && wxData && !SYNC && !ARCV;
+  $("wxHdr").hidden = !on; $("vWx").hidden = !on;
+  if(!on) return;
+  let [ic, txt] = WX[wxData.weather_code] || ["🌡", ""];
+  if(!wxData.is_day && wxData.weather_code <= 1) ic = "🌙";
+  const t = Math.round(wxData.temperature_2m), fl = Math.round(wxData.apparent_temperature), u = "°" + (S.wxUnit === "C" ? "C" : "F");
+  $("wxHdr").textContent = `${ic} ${t}${u}`; $("wxHdr").title = `${txt}, feels like ${fl}${u}`;
+  $("vWx").textContent = `${ic} ${t}${u} · ${txt}${Math.abs(fl - t) >= 3 ? ` · feels like ${fl}${u}` : ""}`;
+}
+function renderWxUI(){
+  $("s-wxOn").checked = !!S.wxOn; $("s-wxUnit").value = S.wxUnit === "C" ? "C" : "F";
+  if(!$("wxMsg").textContent) $("wxMsg").textContent = "Location: " + (S.wxPlace || "Champaign–Urbana");
+}
+$("s-wxOn").onchange = e => { S.wxOn = e.target.checked; save(); wxFetch(); wxRender(); };
+$("s-wxUnit").onchange = e => { S.wxUnit = e.target.value; save(); wxFetch(); };
+$("wxCU").onclick = () => { S.wxLat = S.wxLon = null; S.wxPlace = ""; save(); $("wxMsg").textContent = "Location: Champaign–Urbana"; wxFetch(); };
+$("wxHere").onclick = () => {
+  if(!navigator.geolocation){ $("wxMsg").textContent = "This browser can't share its location."; return; }
+  $("wxMsg").textContent = "Asking the browser where this computer is…";
+  navigator.geolocation.getCurrentPosition(p => { S.wxLat = +p.coords.latitude.toFixed(3); S.wxLon = +p.coords.longitude.toFixed(3); S.wxPlace = "this computer's location"; save(); $("wxMsg").textContent = "Location: this computer's location"; wxFetch(); },
+    () => { $("wxMsg").textContent = "The browser didn't share a location."; }, {timeout:15000});
+};
+if(!SYNC && !ARCV){ setTimeout(wxFetch, 1500); setInterval(() => { if(!document.hidden) wxFetch(); }, 15*60*1000); }
+
 /* ================= UIUC MTD bus times ================= */
-var mtdData = null, mtdAt = 0, mtdErr = "", mtdT = null;
+var mtdData = null, mtdAt = 0, mtdErr = "", mtdT = null, mtdLast = null, mtdLastWarned = {};
+const MTD_WIN = 120;   // minutes of departures to ask for (also how far ahead "last bus" can be told)
+// Late in the evening, a departure with nothing after it in the rest of the window is the last bus (for a while, at least).
+function mtdFindLast(){
+  mtdLast = null;
+  if(!mtdData || !mtdData.length) return;
+  const h = new Date().getHours();
+  if(!(h >= (+S.mtdLastFrom || 21) || h < 4)) return;
+  const times = mtdData.map(d => ({d, t:Date.parse(d.estimatedDeparture || d.scheduledDeparture)})).filter(x => !isNaN(x.t) && x.t > Date.now() - 30000).sort((a,b) => a.t - b.t);
+  if(!times.length) return;
+  const last = times[times.length - 1];
+  // only call it "last" if the list stops well before the end of what MTD was asked for
+  if(last.t < Date.now() + (MTD_WIN - 20) * 60000) mtdLast = last;
+}
+function mtdLastCheck(){
+  mtdFindLast();
+  if(!mtdLast || !S.mtdLastAlert) return;
+  const r = mtdLast.d.route || {}, nm = busName(r.shortName, mtdLast.d.headsign || r.longName), mins = Math.round((mtdLast.t - Date.now()) / 60000);
+  const key = (mtdLast.d.trip && mtdLast.d.trip.tripId) || mtdLast.t;
+  for(const lead of [+S.mtdLastLead || 15, 5]){
+    if(mins <= lead && mins >= 0 && !mtdLastWarned[key + ":" + lead]){
+      mtdLastWarned[key + ":" + lead] = 1;
+      gToast(`🌙 <b>Last bus</b> from ${escH(S.mtdStopName || S.mtdStop)}: <b>${escH(nm)}</b> ${mins <= 0 ? "is leaving now" : `leaves in ${mins} min`} (${new Date(mtdLast.t).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})})`);
+      try{ unlockAudio(); playSound("chime", undefined, 1); }catch(e){}
+      break;
+    }
+  }
+}
 function mtdBase(){
   const h = SYNC ? PHSRV : normHost(S.syncServer);
   return h ? `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}/mtd` : "https://api.mtd.dev";   // without a sync server, ask MTD directly
@@ -2812,7 +2913,7 @@ async function mtdGet(path){
 async function mtdPoll(){
   if(!mtdVisible() || document.hidden) return;
   try{
-    mtdData = (await mtdGet(`/stops/${mtdId(S.mtdStop)}/departures?time=60`))
+    mtdData = (await mtdGet(`/stops/${mtdId(S.mtdStop)}/departures?time=${MTD_WIN}`))
       .sort((a,b) => (a.minutesTillDeparture ?? 999) - (b.minutesTillDeparture ?? 999));
     mtdAt = Date.now(); mtdErr = "";
   }catch(e){ mtdErr = e.message || String(e); }
@@ -2834,15 +2935,17 @@ function mtdRender(){
   $("mtdAge").textContent = mtdErr ? "⚠️ offline" : mtdAt ? "live" : "";
   if(mtdErr && !mtdData){ $("mtdList").innerHTML = `<div class="mtd-empty">Couldn't get bus times: ${escH(mtdErr)}</div>`; return; }
   if(!mtdData){ $("mtdList").innerHTML = `<div class="mtd-empty">Loading…</div>`; return; }
+  mtdLastCheck();
   // count down between updates using the estimated times
   const now = Date.now();
   const rows = mtdData.map(d => {
     const t = Date.parse(d.estimatedDeparture || d.scheduledDeparture);
-    return Object.assign({}, d, {min: isNaN(t) ? d.minutesTillDeparture : Math.floor((t - now) / 60000)});
+    return Object.assign({}, d, {_src:d, min: isNaN(t) ? d.minutesTillDeparture : Math.floor((t - now) / 60000)});
   }).filter(d => d.min >= 0).slice(0, +S.mtdCount || 4);
   $("mtdList").innerHTML = rows.length ? rows.map(d => {
     const r = d.route || {}, bg = "#" + (r.color || "777777"), fg = "#" + (r.textColor || "ffffff");
-    return `<div class="mtd-row"><span class="mtd-pill" style="background:${escH(bg)};color:${escH(fg)}">${escH(r.shortName || "")}</span><span class="mtd-hs">${escH(d.headsign || r.longName || "")}</span><span class="mtd-min${d.isRealTime ? "" : " sched"}">${d.isRealTime ? `<i class="rt"></i>` : ""}${d.min <= 0 ? "Due" : d.min + " min"}</span></div>`;
+    const isLast = mtdLast && mtdLast.d === d._src;
+    return `<div class="mtd-row${isLast ? " last" : ""}"><span class="mtd-pill" style="background:${escH(bg)};color:${escH(fg)}">${escH(r.shortName || "")}</span><span class="mtd-hs">${escH(d.headsign || r.longName || "")}</span>${isLast ? `<span class="mtd-lastlbl">last</span>` : ""}<span class="mtd-min${d.isRealTime ? "" : " sched"}">${d.isRealTime ? `<i class="rt"></i>` : ""}${d.min <= 0 ? "Due" : d.min + " min"}</span></div>`;
   }).join("") : `<div class="mtd-empty">No buses in the next hour.</div>`;
 }
 function mtdStart(){
@@ -2854,12 +2957,15 @@ function mtdStart(){
 document.addEventListener("visibilitychange", () => { if(!document.hidden && mtdVisible() && Date.now() - mtdAt > 30000) mtdPoll(); });
 function renderMtdUI(){
   $("s-mtdOn").checked = !!S.mtdOn; $("mtdSetup").hidden = !S.mtdOn;
-  $("s-mtdPhones").checked = !!S.mtdPhones; $("s-mtdScreenAlerts").checked = !!S.mtdScreenAlerts;
+  $("s-mtdPhones").checked = !!S.mtdPhones; $("s-mtdScreenAlerts").checked = !!S.mtdScreenAlerts; $("s-mtdLastAlert").checked = !!S.mtdLastAlert;
+  if(!$("s-mtdLastFrom").options.length) $("s-mtdLastFrom").innerHTML = [18,19,20,21,22,23].map(h => `<option value="${h}">${h > 12 ? h - 12 : h} PM</option>`).join("");
+  $("s-mtdLastFrom").value = String(S.mtdLastFrom); $("s-mtdLastLead").value = String(S.mtdLastLead);
   $("mtdKey").value = S.mtdKey; $("s-mtdCorner").value = S.mtdCorner; $("s-mtdWhere").value = S.mtdWhere; $("s-mtdCount").value = String(S.mtdCount);
   if(!$("mtdMsg").textContent) $("mtdMsg").textContent = S.mtdStop ? `Stop: ${S.mtdStopName || S.mtdStop}` : "";
 }
 $("s-mtdOn").onchange = e => { S.mtdOn = e.target.checked; save(); renderMtdUI(); mtdStart(); syncSoon(); };
-["mtdPhones","mtdScreenAlerts"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); syncSoon(); });
+["mtdPhones","mtdScreenAlerts","mtdLastAlert"].forEach(k => $("s-"+k).onchange = e => { S[k] = e.target.checked; save(); syncSoon(); mtdRender(); });
+["mtdLastFrom","mtdLastLead"].forEach(k => $("s-"+k).onchange = e => { S[k] = +e.target.value; save(); mtdRender(); syncSoon(); });
 $("mtdKeySave").onclick = () => { S.mtdKey = $("mtdKey").value.trim(); save(); $("mtdMsg").textContent = S.mtdKey ? "Key saved." : "Key removed (the server's MTD_KEY secret is used if it has one)."; mtdData = null; mtdStart(); };
 $("mtdFind").onclick = async () => {
   const q = $("mtdQ").value.trim(); if(!q) return;
@@ -3194,7 +3300,8 @@ function syncState(){
   const c = colors();
   const playing = S.src === "app" ? np.playing : !musicPaused;
   return {v:1, mode, label:LABELS[mode], running,
-    bus: S.mtdOn && S.mtdPhones && normHost(S.syncServer) ? {id:S.mtdStop, n:S.mtdStopName} : undefined,
+    bus: S.mtdOn && S.mtdPhones && normHost(S.syncServer) ? {id:S.mtdStop, n:S.mtdStopName,
+      last: S.mtdLastAlert && mtdLast ? {nm:busName((mtdLast.d.route || {}).shortName, mtdLast.d.headsign), t:mtdLast.t} : undefined} : undefined,
     remaining: running ? Math.max(0, endAt - Date.now()) : remaining*1000, total: total(mode)*1000,
     cycle, every:S.every, done:stats.done, colors:c,
     song: curTrack && curTrack.name ? {uri:curTrack.uri, name:curTrack.name, artist:curTrack.artist || "", art:curTrack.art || ""} : null,
@@ -3691,7 +3798,8 @@ function vizTap(){
 }
 var vizBeatAt = performance.now();
 
-function vizActive(){ return !SYNC && S.viz && ((isBreak() && running) || vizPreview); }
+function vizActive(){ return !SYNC && ((S.viz && ((isBreak() && running) || vizPreview)) || (S.vibes && vibesVizMode() === "full")); }
+function vibesVizMode(){ return ["off","calm","full"].includes(S.vibesVizMode) ? S.vibesVizMode : (S.vibesViz === false ? "off" : "calm"); }
 function vizUpdate(){
   const want = vizActive();
   document.body.classList.toggle("viz", want);
@@ -5210,6 +5318,9 @@ if(SYNC){
 // show the card when the big screen offers bus alerts; start from the room's stop
 function pbRoom(bus){
   $("phBusBox").hidden = !bus;
+  const L = bus && bus.last;
+  $("pbLast").hidden = !L || L.t < Date.now();
+  if(L) $("pbLast").textContent = `🌙 Last bus from ${(bus.n || "").replace(/\s*\(.*\)$/, "")}: ${L.nm} at ${new Date(L.t).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"})}`;
   if(!bus) return;
   if(!pb.from && bus.id){ pb.from = {id:bus.id.split(":")[0], n:(bus.n || bus.id).replace(/\s*\(.*\)$/, "")}; }
   pbRenderPicks();
