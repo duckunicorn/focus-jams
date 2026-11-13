@@ -239,6 +239,7 @@
   .cz-none{padding:8px 10px;opacity:.6;font-size:14px}
   @keyframes czflash{0%,60%{background:color-mix(in srgb,var(--accent) 30%,transparent)}100%{background:transparent}}
   .cz-flash{animation:czflash 1.8s ease;border-radius:8px}
+  .sc-code{font:700 26px ui-monospace,monospace;letter-spacing:.06em;padding:10px 14px;border-radius:12px;background:var(--panel2);display:inline-block;user-select:all;word-break:break-all}
   #keysDlg table{width:100%;border-collapse:collapse;font-size:15px} #keysDlg td{padding:6px 4px;border-top:1px solid var(--line)}
   #keysDlg kbd{display:inline-block;min-width:1.6em;text-align:center;padding:2px 7px;border-radius:6px;border:1px solid var(--line);border-bottom-width:3px;background:var(--panel2);font:600 13px ui-monospace,monospace}
   .upd{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:60;display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 8px 6px 16px;box-shadow:0 10px 30px rgba(0,0,0,.35);font-size:14px}
@@ -1038,7 +1039,8 @@
       </ol>
       <div class="note" style="margin-top:12px"><b>Used Focus Jams before on another computer?</b> Load your settings backup (Customize → 💾 Backup → Download backup there) to bring everything over and skip the setup.
         <div class="testrow" style="margin-top:8px"><label class="big sm btnlink" style="color:var(--accent-ink);cursor:pointer">⬆ Load a backup<input type="file" id="suImport" accept=".json,application/json" hidden></label></div>
-        <p class="hint" id="suImpMsg" style="margin:6px 0 0"></p></div>
+        <p class="hint" id="suImpMsg" style="margin:6px 0 0"></p>
+        <div class="row" style="margin-top:8px"><input type="text" id="suCode" placeholder="…or type your setup code" autocomplete="off" spellcheck="false" autocapitalize="characters"><button class="ghost sm" id="suCodeGo">Load</button></div></div>
     </div>
 
     <div class="su-step" data-su="1" hidden>
@@ -1288,6 +1290,17 @@
     </div>
 
     <div id="dlgBackup" class="dpane" hidden>
+      <h3>Setup code</h3>
+      <p class="hint" style="margin-top:0">A short code that copies this setup to another computer: Spotify Client ID, sync server, archive key, playlists, colors, sounds, bus stop and everything else. Saved on your sync server and kept up to date when you change settings.</p>
+      <div id="scHave" hidden>
+        <div class="sc-code" id="scCode"></div>
+        <div class="testrow" style="margin-top:6px"><button class="ghost sm" id="scCopy">Copy</button><button class="ghost sm" id="scNow">Update now</button><button class="ghost sm" id="scDel">Delete this code</button></div>
+      </div>
+      <div class="testrow" id="scNone" style="margin-top:0"><button class="big sm" id="scMake">Create a setup code</button></div>
+      <p class="hint" id="scMsg"></p>
+      <div class="row" style="margin-top:4px"><input type="text" id="scIn" placeholder="Have a code? Type it here" autocomplete="off" spellcheck="false" autocapitalize="characters"><button class="ghost" id="scLoad">Load</button></div>
+      <p class="hint">Anyone with the code gets these settings, including your archive and bus keys, so only share it with people you'd give those to.</p>
+
       <h3>Keyboard shortcuts</h3>
       <div class="testrow" style="margin-top:0"><button class="ghost sm" id="keysOpen">⌨️ Show keyboard shortcuts</button></div>
       <p class="hint">Or press <b>?</b> any time.</p>
@@ -1490,7 +1503,7 @@ var artLums = {};   // album cover brightness, by image address
 if(SAVED.chime === false && !SAVED.focusSound){ S.focusSound = S.breakSound = "none"; }  // older version's "no chime"
 delete S.chime;
 if(!S.clientId) S.clientId = DEFAULT_CLIENT_ID;
-const save = () => store.set("fj-settings", S);
+const save = () => { store.set("fj-settings", S); if(typeof scSoon === "function") scSoon(); };   // (a setup code, if any, follows along)
 let uploadedImg = store.get("fj-img");   // data URL from an upload
 
 const today = new Date().toDateString();
@@ -3982,14 +3995,17 @@ renderVizUI();
 const BACKUP_SKIP = ["syncCode", "deviceId"];   // per-computer; Spotify sign-in lives elsewhere and is never exported
 const blobToDataUrl = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
 const dataUrlToBlob = async u => (await fetch(u)).blob();
+async function buildBackup(){
+  const settings = Object.assign({}, S); BACKUP_SKIP.forEach(k => delete settings[k]);
+  const sounds = [];
+  for(const c of Object.values(customSounds)) sounds.push({id:c.id, name:c.name, start:c.start || 0, len:c.len || CUSTOM_DEFAULT_SECS, data:await blobToDataUrl(c.blob)});
+  return {app:"focus-jams", version:1, exported:new Date().toISOString(), settings, backgroundImage:uploadedImg || null, sounds, history:store.get("fj-hist") || null};
+}
 async function exportBackup(){
   const msg = t => $("bkMsg").textContent = t;
   msg("Preparing…");
   try{
-    const settings = Object.assign({}, S); BACKUP_SKIP.forEach(k => delete settings[k]);
-    const sounds = [];
-    for(const c of Object.values(customSounds)) sounds.push({id:c.id, name:c.name, start:c.start || 0, len:c.len || CUSTOM_DEFAULT_SECS, data:await blobToDataUrl(c.blob)});
-    const data = {app:"focus-jams", version:1, exported:new Date().toISOString(), settings, backgroundImage:uploadedImg || null, sounds, history:store.get("fj-hist") || null};
+    const data = await buildBackup(), sounds = data.sounds;
     const url = URL.createObjectURL(new Blob([JSON.stringify(data)], {type:"application/json"}));
     const a = document.createElement("a");
     a.href = url; a.download = `focus-jams-backup-${new Date().toISOString().slice(0,10)}.json`;
@@ -3999,10 +4015,13 @@ async function exportBackup(){
   }catch(e){ msg("Couldn't make the backup: " + (e && e.message || e)); }
 }
 async function importBackup(file){
-  const msg = t => $("bkMsg").textContent = t;
   if(!file) return;
   let data;
-  try{ data = JSON.parse(await file.text()); }catch(e){ msg("That file isn't a Focus Jams backup."); return; }
+  try{ data = JSON.parse(await file.text()); }catch(e){ $("bkMsg").textContent = "That file isn't a Focus Jams backup."; return; }
+  return applyBackup(data);
+}
+async function applyBackup(data, extraSettings){
+  const msg = t => $("bkMsg").textContent = t;
   if(!data || data.app !== "focus-jams" || !data.settings || typeof data.settings !== "object"){ msg("That file isn't a Focus Jams backup."); return; }
   if(!confirmImport()) return;
   msg("Loading…");
@@ -4015,7 +4034,7 @@ async function importBackup(file){
       if(d === null || typeof v === typeof d || (k === "customNames" && v && typeof v === "object")) next[k] = v;
     }
     // custom sounds: replace this browser's set with the backup's
-    for(const id of Object.keys(customSounds)){ try{ await idbDo("readwrite", st => st.delete(id)); }catch(e){} }
+    if(Array.isArray(data.sounds)) for(const id of Object.keys(customSounds)){ try{ await idbDo("readwrite", st => st.delete(id)); }catch(e){} }
     for(const sd of (Array.isArray(data.sounds) ? data.sounds : [])){
       if(!sd || typeof sd.data !== "string" || !sd.data.startsWith("data:")) continue;
       const blob = await dataUrlToBlob(sd.data);
@@ -4023,8 +4042,9 @@ async function importBackup(file){
     }
     // background picture
     if(typeof data.backgroundImage === "string" && data.backgroundImage.startsWith("data:image/")) store.set("fj-img", data.backgroundImage);
-    else store.set("fj-img", null);
+    else if(data.backgroundImage !== undefined) store.set("fj-img", null);   // (setup codes too big for the picture leave it out: keep this computer's)
     if(data.history && typeof data.history === "object" && Array.isArray(data.history.nights)) store.set("fj-hist", data.history);
+    Object.assign(next, extraSettings || {});
     store.set("fj-settings", next);
     msg("Loaded! Reloading to apply…");
     setTimeout(() => location.reload(), 700);
@@ -4032,6 +4052,89 @@ async function importBackup(file){
 }
 // The page's custom dialogs are used everywhere else; a simple confirm is fine for this rare, destructive step.
 function confirmImport(){ return window.FJ_AUTO_CONFIRM || confirm("Replace this browser's Focus Jams setup with the backup? (Your Spotify sign-in stays.)"); }
+/* ================= setup codes: copy your whole setup to another computer by typing a code ================= */
+// Code looks like "K7P2-QX9M@duckunicorn": 8 letters/numbers, then which sync server it's on
+// ("duckunicorn" = focus-jams.duckunicorn.workers.dev; a full address works too).
+var scInfo = store.get("fj-setupcode") || null, scT = null;
+const scHttp = h => `${/^(localhost|127\.)/.test(h) ? "http" : "https"}://${h}`;
+function scDisplay(info){
+  const m = info.host.match(/^focus-jams\.([a-z0-9-]+)\.workers\.dev$/i);
+  return info.code.slice(0, 4) + "-" + info.code.slice(4) + "@" + (m ? m[1] : info.host);
+}
+function scParse(txt){
+  const t = String(txt || "").trim().replace(/\s+/g, "");
+  const m = t.match(/^([A-Za-z0-9]{4})-?([A-Za-z0-9]{4})(?:@(.+))?$/);
+  if(!m) return null;
+  let host = m[3] ? m[3].toLowerCase() : normHost(S.syncServer);
+  if(host && !host.includes(".") && !host.includes(":")) host = `focus-jams.${host}.workers.dev`;
+  return {code:(m[1] + m[2]).toUpperCase(), host:normHost(host)};
+}
+// what goes in a code: the backup, minus the parts that would make it too big (history, picture, sounds; in that order)
+async function scPayload(){
+  const d = await buildBackup(); d.history = undefined;   // history: use the shared archive for that
+  const left = [];
+  let txt = JSON.stringify(d);
+  if(txt.length > 1800000 && d.backgroundImage){ d.backgroundImage = undefined; left.push("background picture"); txt = JSON.stringify(d); }
+  if(txt.length > 1800000 && d.sounds.length){ d.sounds = undefined; left.push("custom sounds"); txt = JSON.stringify(d); }
+  return {txt, left};
+}
+function scRender(){
+  $("scHave").hidden = !scInfo; $("scNone").hidden = !!scInfo;
+  if(scInfo) $("scCode").textContent = scDisplay(scInfo);
+}
+async function scMake(){
+  const host = normHost(S.syncServer);
+  if(!host){ $("scMsg").textContent = "Set up your sync server first (Customize → 👥 Group → Your sync server): codes are saved there."; return; }
+  $("scMsg").textContent = "Creating…";
+  try{
+    const {txt, left} = await scPayload();
+    const r = await fetch(scHttp(host) + "/setup", {method:"POST", headers:{"content-type":"application/json"}, body:txt});
+    const j = await r.json().catch(() => null);
+    if(!r.ok || !j || !j.code) throw new Error(r.status === 404 ? "your sync server needs the latest update (Cloudflare installs it within a few minutes)" : (j && j.error) || "HTTP " + r.status);
+    scInfo = {code:j.code, token:j.token, host, at:Date.now()}; store.set("fj-setupcode", scInfo); scRender();
+    $("scMsg").textContent = "✅ On the other computer, type this code in the setup guide or here (💾 Backup → Setup code)." + (left.length ? ` Left out (too big): ${left.join(", ")}.` : "");
+  }catch(e){ $("scMsg").textContent = "❌ Couldn't create a code: " + e.message; }
+}
+async function scPush(manual){
+  if(!scInfo) return;
+  try{
+    const {txt} = await scPayload();
+    const r = await fetch(scHttp(scInfo.host) + "/setup/" + scInfo.code, {method:"PUT", headers:{"content-type":"application/json", "x-setup-token":scInfo.token}, body:txt});
+    if(r.status === 404 || r.status === 403){ scInfo = null; store.set("fj-setupcode", null); scRender(); $("scMsg").textContent = "That code was deleted. Create a new one."; return; }
+    if(manual) $("scMsg").textContent = r.ok ? "✅ The code now has your latest settings." : "❌ Couldn't update it right now.";
+  }catch(e){ if(manual) $("scMsg").textContent = "❌ Couldn't reach your sync server."; }
+}
+function scSoon(){ if(scInfo && !SYNC){ clearTimeout(scT); scT = setTimeout(() => scPush(false), 8000); } }
+async function scLoad(txt, msgEl){
+  const say = t => { msgEl.textContent = t; };
+  const c = scParse(txt);
+  if(!c){ say("That doesn't look like a setup code. It's like K7P2-QX9M@yourname."); return; }
+  if(!c.host){ say("Add the part after @ too (it says which server the code is on)."); return; }
+  say("Loading…");
+  try{
+    const r = await fetch(scHttp(c.host) + "/setup/" + c.code, {cache:"no-store"});
+    const data = await r.json().catch(() => null);
+    if(!r.ok || !data){ say("❌ " + ((data && data.error) || (r.status === 404 ? "That code doesn't exist." : "Couldn't load it (HTTP " + r.status + ")."))); return; }
+    if(!data.settings || data.app !== "focus-jams"){ say("❌ That code doesn't hold a Focus Jams setup."); return; }
+    await applyBackup(data, {syncServer:normHost(data.settings.syncServer) || c.host});   // keep the server the code came from
+    say($("bkMsg").textContent || "Loaded! Reloading…");
+    if(/Loaded/.test($("bkMsg").textContent)) store.set("fj-setup", {done:true, resume:true, step:SU_N - 1});
+  }catch(e){ say("❌ Couldn't reach that server. Check the part after @."); }
+}
+$("scMake").onclick = scMake;
+$("scNow").onclick = () => scPush(true);
+$("scCopy").onclick = () => navigator.clipboard.writeText(scDisplay(scInfo)).then(() => $("scMsg").textContent = "Copied.", () => {});
+$("scDel").onclick = async () => {
+  if(!scInfo || !(window.FJ_AUTO_CONFIRM || confirm("Delete this setup code? It stops working everywhere. This computer's settings stay as they are."))) return;
+  try{ await fetch(scHttp(scInfo.host) + "/setup/" + scInfo.code, {method:"DELETE", headers:{"x-setup-token":scInfo.token}}); }catch(e){}
+  scInfo = null; store.set("fj-setupcode", null); scRender(); $("scMsg").textContent = "Deleted.";
+};
+$("scLoad").onclick = () => scLoad($("scIn").value, $("scMsg"));
+$("scIn").onkeydown = e => { if(e.key === "Enter") $("scLoad").click(); };
+$("suCodeGo").onclick = () => scLoad($("suCode").value, $("suImpMsg"));
+$("suCode").onkeydown = e => { if(e.key === "Enter") $("suCodeGo").click(); };
+scRender();
+
 $("bkExport").onclick = exportBackup;
 $("bkImport").onchange = e => { importBackup(e.target.files[0]); e.target.value = ""; };
 

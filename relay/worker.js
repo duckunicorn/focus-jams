@@ -21,7 +21,7 @@ const MAX_MSG = 1_000_000;   // Cloudflare's WebSocket message limit is 1 MiB
 const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, PUT, POST, DELETE, OPTIONS",
-  "access-control-allow-headers": "content-type, x-apikey",
+  "access-control-allow-headers": "content-type, x-apikey, x-setup-token",
   "access-control-max-age": "86400",
 };
 
@@ -37,6 +37,36 @@ export default {
     if (ar) {
       const box = env.ARCHIVES.get(env.ARCHIVES.idFromName(ar[1].toLowerCase()));
       return box.fetch(req);
+    }
+    // setup codes: a saved copy of someone's settings, loaded on another computer by typing the code
+    //   POST /setup → {code, token}   GET /setup/<code> → {data}   PUT|DELETE /setup/<code> (x-setup-token)
+    const su = url.pathname.match(/^\/setup(?:\/([A-Za-z0-9]{8}))?$/);
+    if (su) {
+      const ALPH = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+      const box = code => env.ARCHIVES.get(env.ARCHIVES.idFromName("setup:" + code));
+      const call = (code, method, body) => box(code).fetch(new Request(url.origin + "/__setup", { method, body, headers: { "content-type": "application/json" } }));
+      if (req.method === "POST" && !su[1]) {
+        const body = await req.text();
+        if (body.length > 1_900_000) return json({ error: "too big" }, 413);
+        const token = crypto.randomUUID();
+        for (let tries = 0; tries < 5; tries++) {
+          const code = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => ALPH[b % ALPH.length]).join("");
+          const r = await call(code, "PUT", JSON.stringify({ token, create: true, data: body }));
+          if (r.status === 409) continue;
+          if (!r.ok) return r;
+          return json({ code, token });
+        }
+        return json({ error: "try again" }, 500);
+      }
+      if (!su[1]) return json({ error: "not found" }, 404);
+      const code = su[1].toUpperCase();
+      if (req.method === "GET") return call(code, "GET");
+      if (req.method === "PUT" || req.method === "DELETE") {
+        const body = req.method === "PUT" ? await req.text() : "";
+        if (body.length > 1_900_000) return json({ error: "too big" }, 413);
+        return call(code, req.method === "PUT" ? "PUT" : "DELETE", JSON.stringify({ token: req.headers.get("x-setup-token") || "", data: body }));
+      }
+      return json({ error: "not found" }, 404);
     }
     // UIUC MTD bus times: /mtd/stops/<stop>/departures and /mtd/stops/search?query=… are passed to api.mtd.dev.
     // The MTD key comes from the server's MTD_KEY secret if set, otherwise from the page (X-ApiKey).
@@ -277,6 +307,24 @@ export class Archive extends DurableObject {
         const map = this.env.ARCHIVES.get(this.env.ARCHIVES.idFromName("view:" + token));
         await map.fetch(new Request(url.origin + "/__settarget?key=" + encodeURIComponent(key), { method: "PUT" }));
         return json({ token });
+      }
+      // setup code storage (only reachable from inside the worker)
+      if (path === "/__setup") {
+        const cur = await this.ctx.storage.get("setup");
+        if (req.method === "GET") return cur ? new Response(cur.data, { headers: { "content-type": "application/json", ...CORS } }) : json({ error: "That code doesn't exist (or was deleted)." }, 404);
+        const b = await req.json();
+        if (req.method === "PUT") {
+          if (cur && b.create) return json({ error: "taken" }, 409);
+          if (cur && cur.token !== b.token) return json({ error: "not yours" }, 403);
+          if (!cur && !b.create) return json({ error: "That code doesn't exist (or was deleted)." }, 404);
+          await this.ctx.storage.put("setup", { token: b.token, data: b.data, at: Date.now() });
+          return json({ ok: true });
+        }
+        if (req.method === "DELETE") {
+          if (cur && cur.token !== b.token) return json({ error: "not yours" }, 403);
+          await this.ctx.storage.delete("setup");
+          return json({ ok: true });
+        }
       }
       // (only reachable from inside the worker: outside requests to /archive/... always have a key in front)
       if (path === "/__target") return json({ key: (await this.ctx.storage.get("target")) || null });
